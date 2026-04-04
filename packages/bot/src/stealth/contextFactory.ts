@@ -1,25 +1,119 @@
-/**
- * Stealth context factory — Story 2-2 minimal stub.
- * Story 3-1 will replace this with a full stealth implementation
- * (playwright-extra, puppeteer-extra-plugin-stealth, fingerprint randomisation, etc.).
- */
-import { chromium } from 'playwright'
-import type { BrowserContext } from 'playwright'
+import { chromium } from 'playwright-extra'
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import type { BrowserContext, BrowserContextOptions } from 'playwright'
+import { maskProxy } from '../logger/credentialMasker.ts'
 
-export async function createStealthContext(proxy?: string): Promise<BrowserContext> {
-	const browser = await chromium.launch({ headless: true })
+// Register the stealth plugin once at module level — never inside a function.
+// Registering it multiple times causes duplicate plugin warnings and unpredictable behavior.
+// Disable conflicting evasions — we handle these explicitly via context options and addInitScript.
+// 'user-agent-override' conflicts with our explicit userAgent + locale context settings.
+// 'navigator.languages' conflicts with our addInitScript override for French language signals.
+const stealth = StealthPlugin()
+stealth.enabledEvasions.delete('user-agent-override')
+stealth.enabledEvasions.delete('navigator.languages')
+chromium.use(stealth)
+
+export interface StealthContextOptions {
+	proxy?: string // Full URL: http://user:pass@host:port
+	headless?: boolean // Default: true
+	locale?: string // Default: 'fr-FR'
+	timezone?: string // Default: 'Europe/Paris'
+}
+
+/**
+ * Creates a new isolated Playwright context with the stealth plugin active.
+ *
+ * CREATE-USE-DESTROY PATTERN — the caller MUST always call context.close() in a finally block:
+ *
+ * @example
+ * const context = await createStealthContext({ proxy: account.proxy })
+ * try {
+ *   // use the context
+ * } finally {
+ *   await context.close()
+ * }
+ *
+ * NEVER pool contexts. NEVER reuse a context across accounts. One context per operation.
+ *
+ * ISOLATION GUARANTEE:
+ * Each BrowserContext is created with its own proxy configuration.
+ * Contexts are NEVER shared between accounts.
+ * Promise.allSettled() creates one context per account, each with its own proxy.
+ * Cookie stores, local storage, and session data are all isolated per context.
+ * This means account1's Nike session CANNOT leak into account2's context.
+ */
+export async function createStealthContext(
+	options: StealthContextOptions = {},
+): Promise<BrowserContext> {
+	const { proxy, headless = true, locale = 'fr-FR', timezone = 'Europe/Paris' } = options
+
+	// Log the masked proxy URL — NEVER log raw credentials
+	if (proxy) {
+		console.log(`  Proxy: ${maskProxy(proxy)}`)
+	}
+
+	const browser = await chromium.launch({
+		headless,
+		args: [
+			'--no-sandbox',
+			'--disable-setuid-sandbox',
+			'--disable-dev-shm-usage',
+			'--disable-accelerated-2d-canvas',
+			'--disable-gpu',
+			'--window-size=1920,1080',
+		],
+	})
+
+	const contextOptions: BrowserContextOptions = {
+		locale,
+		timezoneId: timezone,
+		viewport: { width: 1920, height: 1080 },
+		userAgent:
+			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+		extraHTTPHeaders: {
+			'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+			Accept:
+				'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+		},
+		geolocation: { latitude: 48.8566, longitude: 2.3522 },
+		permissions: ['geolocation'],
+	}
+
+	// Configure the proxy at the context level (NOT at the browser level).
+	// Context-level proxy means each context can have a different proxy — critical for
+	// per-account isolation in parallel checkout runs.
+	if (proxy) {
+		const url = new URL(proxy)
+		contextOptions.proxy = {
+			server: `${url.protocol}//${url.hostname}:${url.port}`,
+			username: url.username || undefined,
+			password: url.password || undefined,
+		}
+	}
+
 	let context: BrowserContext
 	try {
-		context = await browser.newContext({
-			locale: 'fr-FR',
-			...(proxy ? { proxy: { server: proxy } } : {}),
-		})
+		context = await browser.newContext(contextOptions)
 	} catch (err) {
-		// newContext() failed — close the browser before propagating to avoid leaking the process
 		await browser.close()
 		throw err
 	}
+
+	// Additional anti-detection: inject init script to hide automation signals.
+	// This runs before every page navigation in the context.
+	await context.addInitScript(() => {
+		// Hide webdriver flag — the most obvious automation signal
+		Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+		// Fake plugin list (empty plugins array is another bot signal)
+		Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
+		// Report French languages
+		Object.defineProperty(navigator, 'languages', {
+			get: () => ['fr-FR', 'fr', 'en'],
+		})
+	})
+
 	// Close the underlying browser when the context is closed (resource cleanup)
 	context.on('close', () => void browser.close())
+
 	return context
 }
