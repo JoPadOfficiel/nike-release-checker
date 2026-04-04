@@ -4,6 +4,14 @@
 # These selectors target the Nike FR store (nike.com/fr/)
 # Verify with dry-run before live drops: nike-bot dry-run --slug <slug> --profile <id>
 
+# Login flow (accounts.nike.com)
+loginEmailInput: 'input[name="emailAddress"], input[type="email"]'
+loginContinueButton: 'button[data-attr="continueBtn"], button.nike-unite-submit-button'
+loginPasswordInput: 'input[name="password"], input[type="password"]'
+loginSubmitButton: 'button[data-attr="loginSubmitBtn"], button.nike-unite-submit-button'
+loginSuccessIndicator: '[data-attr="user-greeting"], a[data-var="logoutLink"]'
+loginErrorIndicator: '.nike-unite-error-message, [data-error="true"]'
+
 # Product page - size grid
 sizeAvailable: '[data-qa="size-available"]'
 sizeSelected: '[data-qa="size-available"][aria-checked="true"]'
