@@ -85,9 +85,25 @@ program
 	.command('logout-all')
 	.description('Delete sessions for all accounts (or a specific one with --account)')
 	.option('--account <id>', 'Account ID to log out')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.action(async (opts: { account?: string }) => {
+		const { clearAllSessions, clearSession } = await import('../auth/accountManager.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		try {
+			if (opts.account) {
+				await clearSession(opts.account)
+				console.log(`Session cleared for ${opts.account}.`)
+			} else {
+				const { count } = await clearAllSessions()
+				if (count === 0) {
+					console.log('No sessions to clear.')
+				} else {
+					console.log(`All sessions cleared. ${count} session file${count === 1 ? '' : 's'} removed.`)
+				}
+			}
+		} catch (err) {
+			console.error(`❌ ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
 	})
 
 program

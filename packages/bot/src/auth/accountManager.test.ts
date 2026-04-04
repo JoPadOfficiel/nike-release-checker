@@ -1,6 +1,6 @@
 import { describe, it, after, before } from 'node:test'
 import { strict as assert } from 'node:assert'
-import { writeFile, rm, stat, mkdir } from 'node:fs/promises'
+import { writeFile, rm, stat, mkdir, access } from 'node:fs/promises'
 import type { ImportResult } from './auth.types.ts'
 
 const TMP_ACCOUNTS = '/tmp/test-import-accounts.json'
@@ -232,5 +232,64 @@ describe('authenticateSingle — valid account ID lookup', () => {
 		assert.equal(result.success, false)
 		assert.ok(result.error?.includes('not found in imported accounts'))
 		assert.equal(result.accountId, 'other-acc')
+	})
+})
+
+describe('clearAllSessions', () => {
+	const SESS_DIR = '.bot-data/sessions'
+
+	before(async () => {
+		await mkdir(SESS_DIR, { recursive: true })
+		await writeFile(`${SESS_DIR}/clr-acc-1.json`, '[]', { encoding: 'utf8', mode: 0o600 })
+		await writeFile(`${SESS_DIR}/clr-acc-2.json`, '[]', { encoding: 'utf8', mode: 0o600 })
+	})
+
+	after(async () => {
+		// best-effort cleanup of any leftover test files
+		for (const id of ['clr-acc-1', 'clr-acc-2']) {
+			await rm(`${SESS_DIR}/${id}.json`, { force: true })
+		}
+	})
+
+	it('deletes all .json session files and returns the count', async () => {
+		const { clearAllSessions } = await import('./accountManager.ts')
+		const { count } = await clearAllSessions()
+		assert.ok(count >= 2, `Expected at least 2 deleted, got ${count}`)
+		// files must be gone
+		await assert.rejects(() => access(`${SESS_DIR}/clr-acc-1.json`))
+		await assert.rejects(() => access(`${SESS_DIR}/clr-acc-2.json`))
+	})
+
+	it('returns count 0 when sessions directory does not exist', async () => {
+		const { clearAllSessions } = await import('./accountManager.ts')
+		// directory already cleared by previous test (or absent)
+		const { count } = await clearAllSessions()
+		assert.equal(count, 0)
+	})
+})
+
+describe('clearSession', () => {
+	const SESS_DIR = '.bot-data/sessions'
+
+	before(async () => {
+		await mkdir(SESS_DIR, { recursive: true })
+	})
+
+	it('deletes the session file and resolves when it exists', async () => {
+		const { clearSession } = await import('./accountManager.ts')
+		await writeFile(`${SESS_DIR}/single-logout-acc.json`, '[]', { encoding: 'utf8', mode: 0o600 })
+		await assert.doesNotReject(() => clearSession('single-logout-acc'))
+		await assert.rejects(() => access(`${SESS_DIR}/single-logout-acc.json`))
+	})
+
+	it('throws "No session found" when the file does not exist', async () => {
+		const { clearSession } = await import('./accountManager.ts')
+		await assert.rejects(
+			() => clearSession('ghost-session-id'),
+			(err: Error) => {
+				assert.ok(err.message.includes('No session found'))
+				return true
+			},
+		)
 	})
 })
