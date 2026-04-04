@@ -26,17 +26,35 @@ export async function performNikeLogin(
 		await page.click(selectors.loginSubmitButton)
 
 		// Step 3: Wait for success or error indicator (race)
+		// .catch(() => null) absorbs the losing branch so it doesn't leak for the full STEP_TIMEOUT.
+		// null means both indicators timed out → treat as timeout failure.
 		const outcome = await Promise.race([
 			page
 				.waitForSelector(selectors.loginSuccessIndicator, { timeout: STEP_TIMEOUT })
-				.then(() => 'success' as const),
+				.then(() => 'success' as const)
+				.catch(() => null),
 			page
 				.waitForSelector(selectors.loginErrorIndicator, { timeout: STEP_TIMEOUT })
-				.then(() => 'error' as const),
+				.then(() => 'error' as const)
+				.catch(() => null),
 		])
 
+		if (outcome === null) {
+			return {
+				success: false,
+				error: `Login timed out waiting for outcome (${STEP_TIMEOUT}ms)`,
+				durationMs: Date.now() - startMs,
+			}
+		}
+
 		if (outcome === 'error') {
-			const errorText = await page.textContent(selectors.loginErrorIndicator)
+			// Wrap in try/catch — element may detach between waitForSelector and textContent (TOCTOU)
+			let errorText: string | null = null
+			try {
+				errorText = await page.textContent(selectors.loginErrorIndicator)
+			} catch {
+				// element detached; fall through to generic message
+			}
 			return {
 				success: false,
 				error: errorText?.trim() ?? 'Login error indicator detected',

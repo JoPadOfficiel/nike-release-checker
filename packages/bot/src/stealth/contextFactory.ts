@@ -8,10 +8,17 @@ import type { BrowserContext } from 'playwright'
 
 export async function createStealthContext(proxy?: string): Promise<BrowserContext> {
 	const browser = await chromium.launch({ headless: true })
-	const context = await browser.newContext({
-		locale: 'fr-FR',
-		...(proxy ? { proxy: { server: proxy } } : {}),
-	})
+	let context: BrowserContext
+	try {
+		context = await browser.newContext({
+			locale: 'fr-FR',
+			...(proxy ? { proxy: { server: proxy } } : {}),
+		})
+	} catch (err) {
+		// newContext() failed — close the browser before propagating to avoid leaking the process
+		await browser.close()
+		throw err
+	}
 	// Close the underlying browser when the context is closed (resource cleanup)
 	context.on('close', () => void browser.close())
 	return context

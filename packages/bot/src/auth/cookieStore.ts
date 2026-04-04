@@ -1,4 +1,5 @@
 import { writeFile, mkdir } from 'node:fs/promises'
+import { basename } from 'node:path'
 import type { BrowserContext } from 'playwright'
 import type { CookieData } from './auth.types.ts'
 
@@ -18,7 +19,9 @@ export async function persistCookies(
 	cookies: CookieData[],
 	sessionsDir = DEFAULT_SESSIONS_DIR,
 ): Promise<void> {
+	// basename() strips any path separators from accountId, preventing path traversal
+	const safeId = basename(accountId)
 	await mkdir(sessionsDir, { recursive: true })
-	const filePath = `${sessionsDir}/${accountId}.json`
+	const filePath = `${sessionsDir}/${safeId}.json`
 	await writeFile(filePath, JSON.stringify(cookies, null, 2), { encoding: 'utf8', mode: 0o600 })
 }
