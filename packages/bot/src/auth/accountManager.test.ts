@@ -1,6 +1,6 @@
-import { describe, it, after } from 'node:test'
+import { describe, it, after, before } from 'node:test'
 import { strict as assert } from 'node:assert'
-import { writeFile, rm, stat } from 'node:fs/promises'
+import { writeFile, rm, stat, mkdir } from 'node:fs/promises'
 import type { ImportResult } from './auth.types.ts'
 
 const TMP_ACCOUNTS = '/tmp/test-import-accounts.json'
@@ -188,5 +188,49 @@ describe('authenticateSingle', () => {
 		const result = await authenticateSingle('ghost-id')
 		assert.equal(result.success, false)
 		assert.ok(result.error?.includes('not found'))
+	})
+})
+
+describe('authenticateSingle — valid account ID lookup', () => {
+	const DATA_DIR = '.bot-data'
+	const ACCOUNTS_FILE = `${DATA_DIR}/accounts.json`
+	const TEST_ACCOUNT = {
+		id: 'test-single-acc',
+		email: 'single@test.com',
+		password: 'pass',
+		proxy: 'http://u:p@proxy:8080',
+		country: 'FR',
+		importedAt: new Date().toISOString(),
+	}
+
+	before(async () => {
+		await mkdir(DATA_DIR, { recursive: true })
+		await writeFile(ACCOUNTS_FILE, JSON.stringify([TEST_ACCOUNT], null, 2), {
+			encoding: 'utf8',
+			mode: 0o600,
+		})
+	})
+
+	after(async () => {
+		await rm(ACCOUNTS_FILE, { force: true })
+	})
+
+	it('finds the account and attempts login (error is not "not found")', async () => {
+		const { authenticateSingle } = await import('./accountManager.ts')
+		const result = await authenticateSingle('test-single-acc')
+		assert.equal(result.accountId, 'test-single-acc')
+		// Account was found — error must not be the "not found" sentinel
+		assert.ok(
+			!result.error?.includes('not found in imported accounts'),
+			`Expected account to be found but got: ${result.error}`,
+		)
+	})
+
+	it('returns not-found for an ID absent from the stored accounts', async () => {
+		const { authenticateSingle } = await import('./accountManager.ts')
+		const result = await authenticateSingle('other-acc')
+		assert.equal(result.success, false)
+		assert.ok(result.error?.includes('not found in imported accounts'))
+		assert.equal(result.accountId, 'other-acc')
 	})
 })
