@@ -1,6 +1,7 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
+import { assertNotBlocked } from '../detectors/blockDetector.ts'
 
 export async function selectSize(
   page: Page,
@@ -14,7 +15,8 @@ export async function selectSize(
   const result = await executeStep(
     'select-size',
     async () => {
-      await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+      const response = await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+      await assertNotBlocked(page, response, selectors)
       await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: timeoutMs })
 
       for (const size of targetSizes) {
