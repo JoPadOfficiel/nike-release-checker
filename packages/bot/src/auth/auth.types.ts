@@ -11,6 +11,7 @@ export interface AccountImportError {
 
 export interface ImportResult {
 	imported: number
-	failed: number
+	failed: number // schema-invalid + dedup-skipped + proxy-failed (all non-imported)
 	errors: AccountImportError[]
+	processedAccounts: Array<{ id: string; email: string; proxy: string }>
 }

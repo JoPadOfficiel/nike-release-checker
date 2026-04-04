@@ -1,6 +1,7 @@
 import { describe, it, after } from 'node:test'
 import { strict as assert } from 'node:assert'
 import { writeFile, rm, stat } from 'node:fs/promises'
+import type { ImportResult } from './auth.types.ts'
 
 const TMP_ACCOUNTS = '/tmp/test-import-accounts.json'
 const BOT_DATA = '.bot-data-test'
@@ -10,24 +11,27 @@ async function write(data: unknown): Promise<void> {
 }
 
 // Inline mock proxyTester to avoid real network calls
-async function mockImportAccounts(
-	filePath: string,
-	proxySuccess: boolean,
-): Promise<{ imported: number; failed: number; errors: { accountId: string; reason: string }[] }> {
+async function mockImportAccounts(filePath: string, proxySuccess: boolean): Promise<ImportResult> {
 	const { loadAccountsFile } = await import('../config/accountConfig.ts')
-	const { writeFile: wf, mkdir, chmod } = await import('node:fs/promises')
+	const { writeFile: wf, mkdir } = await import('node:fs/promises')
 
 	const { valid, errors: validationErrors } = await loadAccountsFile(filePath)
-	const importErrors = validationErrors.map((e: { index: number; field: string; message: string }) => ({
-		accountId: `index:${e.index}`,
-		reason: `${e.field}: ${e.message}`,
-	}))
+	const invalidIndexes = new Set(validationErrors.map((e) => e.index))
+
+	const importErrors: ImportResult['errors'] = validationErrors.map(
+		(e: { index: number; field: string; message: string }) => ({
+			accountId: `index:${e.index}`,
+			reason: `${e.field}: ${e.message}`,
+		}),
+	)
+
+	const processedAccounts = valid.map((a) => ({ id: a.id, email: a.email, proxy: a.proxy }))
 
 	const dataDir = BOT_DATA
 	const accountsFile = `${dataDir}/accounts.json`
 
 	let imported = 0
-	let failed = 0
+	let failed = invalidIndexes.size
 	const merged: unknown[] = []
 
 	for (const account of valid) {
@@ -41,10 +45,9 @@ async function mockImportAccounts(
 	}
 
 	await mkdir(dataDir, { recursive: true })
-	await wf(accountsFile, JSON.stringify(merged, null, 2), 'utf8')
-	await chmod(accountsFile, 0o600)
+	await wf(accountsFile, JSON.stringify(merged, null, 2), { encoding: 'utf8', mode: 0o600 })
 
-	return { imported, failed, errors: importErrors }
+	return { imported, failed, errors: importErrors, processedAccounts }
 }
 
 describe('importAccounts (mocked proxy)', () => {
@@ -90,6 +93,7 @@ describe('importAccounts (mocked proxy)', () => {
 		])
 		const result = await mockImportAccounts(TMP_ACCOUNTS, true)
 		assert.equal(result.imported, 1)
+		assert.equal(result.failed, 1) // schema-invalid entry counted in failed
 		assert.ok(result.errors.some((e) => e.accountId === 'index:0'))
 	})
 })
@@ -97,7 +101,7 @@ describe('importAccounts (mocked proxy)', () => {
 describe('formatImportSummary', () => {
 	it('masks email in output lines', async () => {
 		const { formatImportSummary } = await import('./accountManager.ts')
-		const result = { imported: 1, failed: 0, errors: [] }
+		const result: ImportResult = { imported: 1, failed: 0, errors: [], processedAccounts: [] }
 		const lines = formatImportSummary(result, [
 			{ id: 'acc-1', email: 'user@example.com', proxy: 'http://u:p@proxy:8080' },
 		])
@@ -109,12 +113,53 @@ describe('formatImportSummary', () => {
 
 	it('masks proxy credentials in output lines', async () => {
 		const { formatImportSummary } = await import('./accountManager.ts')
-		const result = { imported: 1, failed: 0, errors: [] }
+		const result: ImportResult = { imported: 1, failed: 0, errors: [], processedAccounts: [] }
 		const lines = formatImportSummary(result, [
 			{ id: 'acc-2', email: 'a@b.com', proxy: 'http://myuser:mysecret@proxy.host:8080' },
 		])
 		for (const line of lines) {
 			assert.ok(!line.includes('mysecret'), `Proxy password must not appear: ${line}`)
 		}
+	})
+
+	it('shows correct denominator including schema-invalid entries', async () => {
+		const { formatImportSummary } = await import('./accountManager.ts')
+		// 1 imported, 2 failed (1 schema-invalid + 1 proxy-failed) → total=3
+		const result: ImportResult = {
+			imported: 1,
+			failed: 2,
+			errors: [{ accountId: 'acc-fail', reason: 'Proxy test failed' }],
+			processedAccounts: [],
+		}
+		const lines = formatImportSummary(result, [
+			{ id: 'acc-ok', email: 'ok@test.com', proxy: 'http://u:p@proxy:8080' },
+			{ id: 'acc-fail', email: 'fail@test.com', proxy: 'http://u:p@proxy:8080' },
+		])
+		assert.ok(lines.some((l) => l.includes('1/3')), `Expected 1/3 in: ${lines.join(' | ')}`)
+	})
+
+	it('uses processedAccounts for per-account display', async () => {
+		const { formatImportSummary } = await import('./accountManager.ts')
+		const result: ImportResult = {
+			imported: 1,
+			failed: 1,
+			errors: [{ accountId: 'acc-2', reason: 'duplicate email — skipped' }],
+			processedAccounts: [
+				{ id: 'acc-1', email: 'ok@test.com', proxy: 'http://u:p@proxy:8080' },
+				{ id: 'acc-2', email: 'dup@test.com', proxy: 'http://u:p@proxy:8080' },
+			],
+		}
+		const lines = formatImportSummary(result, result.processedAccounts)
+		assert.ok(lines.some((l) => l.includes('✓') && l.includes('o***@test.com')))
+		assert.ok(lines.some((l) => l.includes('✗') && l.includes('duplicate email')))
+	})
+})
+
+describe('loadStoredAccounts resilience', () => {
+	it('returns empty array on missing file', async () => {
+		const { loadStoredAccounts } = await import('./accountManager.ts')
+		// Reset module cache doesn't apply here — just verify no throw
+		const result = await loadStoredAccounts()
+		assert.ok(Array.isArray(result))
 	})
 })

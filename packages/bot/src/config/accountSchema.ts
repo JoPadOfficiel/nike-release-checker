@@ -10,6 +10,4 @@ export const AccountConfigSchema = v.object({
 	paymentMethod: v.optional(v.string(), 'PRE_SAVED'),
 })
 
-export const AccountsArraySchema = v.array(AccountConfigSchema)
-
 export type AccountConfig = v.InferOutput<typeof AccountConfigSchema>

@@ -10,19 +10,19 @@ export async function testProxyConnectivity(proxyUrl: string): Promise<ProxyTest
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
 	try {
-		// Parse proxy URL to set up the request
 		const url = new URL(proxyUrl)
 		const proxyAuth =
 			url.username && url.password
 				? `Basic ${Buffer.from(`${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`).toString('base64')}`
 				: undefined
 
-		const proxyHost = `${url.hostname}:${url.port}`
+		// url.hostname is already de-bracketed for IPv6 (e.g. [::1] → ::1)
+		// url.port is '' when not specified — fall back to protocol default
+		const proxyHostname = url.hostname
+		const defaultPort = url.protocol === 'https:' ? 443 : 80
+		const proxyPort = url.port ? parseInt(url.port, 10) : defaultPort
 
-		// Use Node.js native fetch with proxy tunnel via HTTPS_PROXY env variable approach
-		// Node 24 native fetch does not support proxy configuration directly,
-		// so we use a raw TCP tunnel via net.createConnection
-		const response = await fetchThroughProxy(PROBE_URL, proxyHost, proxyAuth, controller.signal)
+		const response = await fetchThroughProxy(PROBE_URL, proxyHostname, proxyPort, proxyAuth, controller.signal)
 
 		const latencyMs = Math.round(performance.now() - start)
 		clearTimeout(timer)
@@ -42,15 +42,13 @@ export async function testProxyConnectivity(proxyUrl: string): Promise<ProxyTest
 
 async function fetchThroughProxy(
 	targetUrl: string,
-	proxyHost: string,
+	proxyHostname: string,
+	proxyPort: number,
 	proxyAuth: string | undefined,
 	signal: AbortSignal,
 ): Promise<number> {
 	const { connect } = await import('node:net')
 	const { connect: tlsConnect } = await import('node:tls')
-
-	const [proxyHostname, proxyPortStr] = proxyHost.split(':')
-	const proxyPort = parseInt(proxyPortStr ?? '8080', 10)
 
 	return new Promise((resolve, reject) => {
 		if (signal.aborted) {
@@ -58,12 +56,34 @@ async function fetchThroughProxy(
 			return
 		}
 
+		let settled = false
+
+		// resolveOnce / rejectOnce guard against double-settlement and clean up the abort listener
+		const resolveOnce = (value: number) => {
+			if (!settled) {
+				settled = true
+				signal.removeEventListener('abort', abortHandler)
+				resolve(value)
+			}
+		}
+		const rejectOnce = (err: Error) => {
+			if (!settled) {
+				settled = true
+				signal.removeEventListener('abort', abortHandler)
+				reject(err)
+			}
+		}
+
+		const abortHandler = () => {
+			socket.destroy()
+			rejectOnce(new Error('Request aborted (timeout)'))
+		}
+
 		const target = new URL(targetUrl)
 		const targetHost = target.hostname
 		const targetPort = target.protocol === 'https:' ? 443 : 80
 
 		const socket = connect(proxyPort, proxyHostname, () => {
-			// Send CONNECT tunnel request
 			const connectHeaders = [
 				`CONNECT ${targetHost}:${targetPort} HTTP/1.1`,
 				`Host: ${targetHost}:${targetPort}`,
@@ -71,59 +91,63 @@ async function fetchThroughProxy(
 				'',
 				'',
 			].join('\r\n')
-
 			socket.write(connectHeaders)
 		})
 
-		socket.once('error', (err) => reject(err))
-		signal.addEventListener('abort', () => {
+		socket.once('error', (err) => {
 			socket.destroy()
-			reject(new Error('Request aborted (timeout)'))
+			rejectOnce(err)
 		})
+
+		signal.addEventListener('abort', abortHandler)
 
 		let buffer = ''
 		socket.on('data', (chunk: Buffer) => {
 			buffer += chunk.toString()
 
-			if (buffer.includes('\r\n\r\n')) {
-				const statusLine = buffer.split('\r\n')[0] ?? ''
-				const statusCode = parseInt(statusLine.split(' ')[1] ?? '0', 10)
+			if (!buffer.includes('\r\n\r\n')) return
 
-				if (statusCode !== 200) {
+			const statusLine = buffer.split('\r\n')[0] ?? ''
+			const statusCode = parseInt(statusLine.split(' ')[1] ?? '0', 10)
+
+			if (statusCode !== 200) {
+				socket.destroy()
+				resolveOnce(statusCode)
+				return
+			}
+
+			// Tunnel established — do a quick HEAD request over TLS
+			socket.removeAllListeners('data')
+			const tlsSocket = tlsConnect({ socket, servername: targetHost }, () => {
+				tlsSocket.write(
+					['HEAD / HTTP/1.1', `Host: ${targetHost}`, 'Connection: close', '', ''].join('\r\n'),
+				)
+			})
+
+			let tlsBuffer = ''
+			tlsSocket.on('data', (tlsChunk: Buffer) => {
+				tlsBuffer += tlsChunk.toString()
+				// Wait for a complete status line before parsing
+				const lineEnd = tlsBuffer.indexOf('\r\n')
+				if (lineEnd === -1) return
+				const firstLine = tlsBuffer.slice(0, lineEnd)
+				const parts = firstLine.split(' ')
+				const tlsStatus = parts.length >= 2 ? parseInt(parts[1]!, 10) : NaN
+				if (isNaN(tlsStatus)) {
+					tlsSocket.destroy()
 					socket.destroy()
-					resolve(statusCode)
+					rejectOnce(new Error(`Unexpected TLS status line: ${firstLine}`))
 					return
 				}
+				tlsSocket.destroy()
+				socket.destroy()
+				resolveOnce(tlsStatus)
+			})
 
-				// Tunnel established — do a quick HEAD request over TLS
-				socket.removeAllListeners('data')
-				const tlsSocket = tlsConnect({ socket, servername: targetHost }, () => {
-					tlsSocket.write(
-						[
-							`HEAD / HTTP/1.1`,
-							`Host: ${targetHost}`,
-							`Connection: close`,
-							'',
-							'',
-						].join('\r\n'),
-					)
-				})
-
-				let tlsBuffer = ''
-				tlsSocket.on('data', (tlsChunk: Buffer) => {
-					tlsBuffer += tlsChunk.toString()
-					if (tlsBuffer.includes('\r\n')) {
-						const tlsStatus = parseInt(tlsBuffer.split(' ')[1] ?? '0', 10)
-						tlsSocket.destroy()
-						socket.destroy()
-						resolve(tlsStatus)
-					}
-				})
-				tlsSocket.on('error', (err) => {
-					socket.destroy()
-					reject(err)
-				})
-			}
+			tlsSocket.on('error', (err) => {
+				socket.destroy()
+				rejectOnce(err)
+			})
 		})
 	})
 }
