@@ -12,6 +12,7 @@ import { addToCart } from './steps/addToCart.ts'
 import { navigateCheckout } from './steps/navigateCheckout.ts'
 import { completeShipping } from './steps/completeShipping.ts'
 import { completePayment } from './steps/completePayment.ts'
+import { handle3DSIfRequired } from './steps/handle3DS.ts'
 import { submitOrder } from './steps/submitOrder.ts'
 
 export interface CheckoutPipelineResult {
@@ -107,6 +108,21 @@ export async function runCheckoutPipeline(
     printStepResult(paymentResult)
     if (paymentResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, paymentResult.outcome, pipelineStart)
+    }
+
+    // Step 5b: Handle 3DS if required
+    const threeDSStepResult = await handle3DSIfRequired(page, selectors, stepTimeoutMs)
+    const effectiveResult: StepResult = threeDSStepResult ?? {
+      step: '3ds-check',
+      outcome: 'success' as const,
+      durationMs: 0,
+      details: 'not_required',
+    }
+    steps.push(effectiveResult)
+    logStep(account.email, effectiveResult)
+    printStepResult(effectiveResult)
+    if (effectiveResult.outcome !== 'success') {
+      return buildResult(account.id, maskedEmail, steps, effectiveResult.outcome, pipelineStart)
     }
 
     // Step 6: Submit order (dry-run aware)
