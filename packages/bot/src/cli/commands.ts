@@ -50,10 +50,13 @@ program
 				const result = await authenticateSingle(opts.account)
 				const elapsed = `${(result.durationMs / 1000).toFixed(1)}s`
 				if (result.success) {
-					console.log(`  ✓ ${maskCredentials(result.accountId)} — done (${elapsed})`)
+					console.log(`Authenticating ${maskCredentials(result.accountId)}... done (${elapsed})`)
+				} else if (result.error?.includes('not found in imported accounts')) {
+					console.error(`Error: Account '${maskCredentials(result.accountId)}' not found.`)
+					process.exit(1)
 				} else {
 					const msg = maskCredentials(result.error ?? 'unknown error')
-					console.error(`  ✗ ${maskCredentials(result.accountId)} — failed (${msg})`)
+					console.error(`Authenticating ${maskCredentials(result.accountId)}... failed (${msg})`)
 					process.exit(1)
 				}
 			} else {

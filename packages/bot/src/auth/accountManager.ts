@@ -162,8 +162,18 @@ async function authenticateAccount(
 }
 
 export async function authenticateAll(): Promise<AuthResult[]> {
-	const accounts = await loadStoredAccounts()
-	const selectors = await loadSelectors()
+	let accounts: Awaited<ReturnType<typeof loadStoredAccounts>>
+	try {
+		accounts = await loadStoredAccounts()
+	} catch (err) {
+		return [{ accountId: '<all>', success: false, error: maskCredentials(String(err)), durationMs: 0 }]
+	}
+	let selectors: Selectors
+	try {
+		selectors = await loadSelectors()
+	} catch (err) {
+		return [{ accountId: '<all>', success: false, error: maskCredentials(String(err)), durationMs: 0 }]
+	}
 	const results: AuthResult[] = []
 	for (const account of accounts) {
 		results.push(await authenticateAccount(account, selectors))
@@ -172,7 +182,12 @@ export async function authenticateAll(): Promise<AuthResult[]> {
 }
 
 export async function authenticateSingle(accountId: string): Promise<AuthResult> {
-	const accounts = await loadStoredAccounts()
+	let accounts: Awaited<ReturnType<typeof loadStoredAccounts>>
+	try {
+		accounts = await loadStoredAccounts()
+	} catch (err) {
+		return { accountId, success: false, error: maskCredentials(String(err)), durationMs: 0 }
+	}
 	const account = accounts.find((a) => a.id === accountId)
 	if (!account) {
 		return {
@@ -182,7 +197,12 @@ export async function authenticateSingle(accountId: string): Promise<AuthResult>
 			durationMs: 0,
 		}
 	}
-	const selectors = await loadSelectors()
+	let selectors: Selectors
+	try {
+		selectors = await loadSelectors()
+	} catch (err) {
+		return { accountId, success: false, error: maskCredentials(String(err)), durationMs: 0 }
+	}
 	return authenticateAccount(account, selectors)
 }
 
