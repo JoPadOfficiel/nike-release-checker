@@ -31,7 +31,9 @@ export async function addToCart(
       await atcButton.click()
 
       // Wait for cart count to update to confirm item was added
-      await page.waitForSelector(selectors.cart.cartCount, { timeout: timeoutMs })
+      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      await page.waitForSelector(selectors.cart.cartCount, { timeout: innerTimeout })
 
       return 'added-to-cart'
     },

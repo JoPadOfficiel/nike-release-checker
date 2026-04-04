@@ -26,7 +26,9 @@ export async function navigateCheckout(
       await checkoutButton.click()
 
       // Wait for shipping section to appear (confirms we are on checkout page)
-      await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: timeoutMs })
+      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: innerTimeout })
 
       return 'checkout-page-reached'
     },

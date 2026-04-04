@@ -10,8 +10,10 @@ export async function completePayment(
   return executeStep(
     'complete-payment',
     async () => {
+      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
       // Wait for payment section
-      await page.waitForSelector(selectors.checkout.paymentSection, { timeout: timeoutMs })
+      await page.waitForSelector(selectors.checkout.paymentSection, { timeout: innerTimeout })
 
       // Check for 3DS BEFORE clicking
       const threeDSBefore = page.locator(selectors.checkout.threeDSIframe)
@@ -38,7 +40,7 @@ export async function completePayment(
       }
 
       // Wait for submit order button to appear to confirm payment step done
-      await page.waitForSelector(selectors.checkout.submitOrderButton, { timeout: timeoutMs })
+      await page.waitForSelector(selectors.checkout.submitOrderButton, { timeout: innerTimeout })
 
       return 'payment-complete'
     },

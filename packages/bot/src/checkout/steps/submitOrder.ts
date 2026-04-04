@@ -21,7 +21,9 @@ export async function submitOrder(
   return executeStep(
     'submit-order',
     async () => {
-      await page.waitForSelector(selectors.checkout.submitOrderButton, { timeout: timeoutMs })
+      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      await page.waitForSelector(selectors.checkout.submitOrderButton, { timeout: innerTimeout })
 
       const submitButton = page.locator(selectors.checkout.submitOrderButton)
       const isVisible = await submitButton.isVisible()
@@ -34,7 +36,7 @@ export async function submitOrder(
       await submitButton.click()
 
       // Wait for order confirmation page
-      await page.waitForSelector(selectors.checkout.orderConfirmation, { timeout: timeoutMs })
+      await page.waitForSelector(selectors.checkout.orderConfirmation, { timeout: innerTimeout })
 
       return 'order-submitted'
     },

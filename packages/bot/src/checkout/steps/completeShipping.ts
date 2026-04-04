@@ -11,7 +11,9 @@ export async function completeShipping(
     'complete-shipping',
     async () => {
       // Wait for shipping continue button to be ready
-      await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: timeoutMs })
+      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: innerTimeout })
 
       const shippingButton = page.locator(selectors.checkout.shippingContinueButton)
       const isVisible = await shippingButton.isVisible()
@@ -24,7 +26,7 @@ export async function completeShipping(
       await shippingButton.click()
 
       // Wait for payment section to appear to confirm shipping step is complete
-      await page.waitForSelector(selectors.checkout.paymentSection, { timeout: timeoutMs })
+      await page.waitForSelector(selectors.checkout.paymentSection, { timeout: innerTimeout })
 
       return 'shipping-complete'
     },

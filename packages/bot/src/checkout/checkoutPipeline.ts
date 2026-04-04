@@ -153,6 +153,19 @@ export async function runCheckoutPipeline(
   }
 }
 
+function stepOutcomeToFinal(outcome: StepOutcome): FinalOutcome {
+  switch (outcome) {
+    case 'success': return 'success'
+    case 'sold_out': return 'sold_out'
+    case 'blocked': return 'blocked'
+    case '3ds_required': return 'error' // 3DS detected but unresolved at pipeline level
+    case '3ds_timeout': return '3ds_timeout'
+    case 'timeout': return 'timeout'
+    case 'no_session': return 'no_session'
+    case 'error': return 'error'
+  }
+}
+
 function buildResult(
   accountId: string,
   accountEmail: string,
@@ -164,7 +177,7 @@ function buildResult(
     accountId,
     accountEmail,
     steps,
-    finalOutcome: outcome as FinalOutcome,
+    finalOutcome: stepOutcomeToFinal(outcome),
     durationMs: Math.round(performance.now() - pipelineStart),
   }
 }
