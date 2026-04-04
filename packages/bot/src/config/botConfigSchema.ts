@@ -14,8 +14,9 @@ export const BotConfigSchema = v.object({
 			language: v.optional(v.string(), 'fr'),
 			currency: v.optional(v.string(), 'EUR'),
 			defaultSizes: v.optional(v.array(v.string()), []),
+			stepTimeoutMs: v.optional(v.pipe(v.number(), v.minValue(1000)), 8000),
 		}),
-		{ market: 'FR', language: 'fr', currency: 'EUR', defaultSizes: [] },
+		{ market: 'FR', language: 'fr', currency: 'EUR', defaultSizes: [], stepTimeoutMs: 8000 },
 	),
 	proxy: v.optional(
 		v.object({
