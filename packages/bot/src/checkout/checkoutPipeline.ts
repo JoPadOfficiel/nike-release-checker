@@ -16,7 +16,7 @@ export interface CheckoutPipelineResult {
   accountId: string
   accountEmail: string
   steps: StepResult[]
-  finalOutcome: StepOutcome | 'no_session' | 'complete'
+  finalOutcome: StepOutcome | 'complete'
   durationMs: number
 }
 
@@ -104,7 +104,7 @@ export async function runCheckoutPipeline(
       return buildResult(account.id, maskedEmail, steps, submitResult.outcome, pipelineStart)
     }
 
-    const finalOutcome = dryRun ? 'complete' : 'complete'
+    const finalOutcome = 'complete'
     console.log(`[checkout] Pipeline complete for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
     return {

@@ -14,7 +14,7 @@ export async function selectSize(
   const result = await executeStep(
     'select-size',
     async () => {
-      await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 })
+      await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
       await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: timeoutMs })
 
       for (const size of targetSizes) {

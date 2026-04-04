@@ -24,15 +24,16 @@ export async function executeStep(
   timeoutMs = 8000,
 ): Promise<StepResult> {
   const start = performance.now()
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const details = await Promise.race([
       fn(),
-      new Promise<never>((_, reject) =>
-        setTimeout(
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
           () => reject(Object.assign(new Error(`Timeout after ${timeoutMs}ms`), { code: 'TIMEOUT' })),
           timeoutMs,
-        ),
-      ),
+        )
+      }),
     ])
     return {
       step: stepName,
@@ -43,6 +44,9 @@ export async function executeStep(
   } catch (err: unknown) {
     const durationMs = Math.round(performance.now() - start)
     const code = (err as { code?: string }).code
+    // Playwright's own waitForSelector/goto timeout throws a TimeoutError with no .code property.
+    // Detect it explicitly so it's classified as 'timeout' rather than 'error'.
+    const isPlaywrightTimeout = err instanceof Error && err.name === 'TimeoutError'
     const outcome: StepOutcome =
       code === 'SOLD_OUT'     ? 'sold_out'     :
       code === 'BLOCKED'      ? 'blocked'      :
@@ -50,6 +54,7 @@ export async function executeStep(
       code === '3DS_TIMEOUT'  ? '3ds_timeout'  :
       code === 'NO_SESSION'   ? 'no_session'   :
       code === 'TIMEOUT'      ? 'timeout'      :
+      isPlaywrightTimeout     ? 'timeout'      :
       'error'
     return {
       step: stepName,
@@ -57,5 +62,7 @@ export async function executeStep(
       durationMs,
       error: err instanceof Error ? err.message : String(err),
     }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
 }
