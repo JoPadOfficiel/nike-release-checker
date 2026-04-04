@@ -42,22 +42,25 @@ export async function validateSession(
 	// Filter out null/undefined items that may appear in malformed session files (P4)
 	const validCookies = cookies.filter((c): c is CookieData => c !== null && typeof c === 'object')
 
-	// sid is the critical short-lived cookie — must be present and non-expired for a valid session.
-	// Playwright stores cookie domains with a leading dot (e.g. `.accounts.nike.com`) — match both forms (P2).
-	const sidCookie = validCookies.find(
-		(c) => c.name === 'sid' && (c.domain === 'accounts.nike.com' || c.domain === '.accounts.nike.com'),
-	)
+	// Critical cookies — session is valid only when ALL are present and non-expired.
+	// Playwright stores domains with a leading dot — match both forms.
+	// Spec: sid (accounts.nike.com), _abck (.nike.com), KP_UIDz (api.nike.com)
+	const criticalCookies = [
+		{ name: 'sid', domains: ['accounts.nike.com', '.accounts.nike.com'] },
+		{ name: '_abck', domains: ['.nike.com'] },
+		{ name: 'KP_UIDz', domains: ['api.nike.com', '.api.nike.com'] },
+	]
 
-	// P1: sid absent from a non-empty file → session cannot be confirmed valid → expired
-	if (!sidCookie) {
-		return { status: 'expired', lastLogin: fileStat.mtime }
-	}
-
-	if (typeof sidCookie.expires === 'number' && sidCookie.expires > 0 && sidCookie.expires < now) {
-		return {
-			status: 'expired',
-			lastLogin: fileStat.mtime,
-			expiredAt: sidCookie.expires,
+	for (const critical of criticalCookies) {
+		const cookie = validCookies.find(
+			(c) => c.name === critical.name && critical.domains.includes(c.domain),
+		)
+		// Absent → session cannot be confirmed valid
+		if (!cookie) {
+			return { status: 'expired', lastLogin: fileStat.mtime }
+		}
+		if (typeof cookie.expires === 'number' && cookie.expires > 0 && cookie.expires < now) {
+			return { status: 'expired', lastLogin: fileStat.mtime, expiredAt: cookie.expires }
 		}
 	}
 

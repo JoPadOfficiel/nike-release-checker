@@ -231,20 +231,13 @@ export function formatImportSummary(
 
 export async function listAccounts(verbose: boolean): Promise<AccountStatusRow[]> {
 	const accounts = await loadStoredAccounts()
-	const rows: AccountStatusRow[] = []
-	for (const account of accounts) {
-		const session = await validateSession(account.id)
-		const row: AccountStatusRow = {
-			id: account.id,
-			email: account.email,
-			country: account.country,
-			proxy: account.proxy,
-			session,
-		}
-		if (verbose) {
-			row.preferredSizes = account.preferredSizes
-		}
-		rows.push(row)
-	}
-	return rows
+	const sessions = await Promise.all(accounts.map((a) => validateSession(a.id)))
+	return accounts.map((account, i) => ({
+		id: account.id,
+		email: account.email,
+		country: account.country,
+		proxy: account.proxy,
+		session: sessions[i]!,
+		...(verbose ? { preferredSizes: account.preferredSizes } : {}),
+	}))
 }
