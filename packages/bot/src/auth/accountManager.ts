@@ -1,5 +1,6 @@
-import { writeFile, mkdir, readFile, access } from 'node:fs/promises'
+import { writeFile, mkdir, readFile, access, readdir, unlink } from 'node:fs/promises'
 import { constants } from 'node:fs'
+import { basename as pathBasename } from 'node:path'
 import { loadAccountsFile } from '../config/accountConfig.ts'
 import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail, maskProxy, maskCredentials } from '../logger/credentialMasker.ts'
@@ -240,4 +241,29 @@ export async function listAccounts(verbose: boolean): Promise<AccountStatusRow[]
 		session: sessions[i]!,
 		...(verbose ? { preferredSizes: account.preferredSizes } : {}),
 	}))
+}
+
+const SESSIONS_DIR = `${DATA_DIR}/sessions`
+
+export async function clearAllSessions(): Promise<{ count: number }> {
+	let files: string[]
+	try {
+		files = await readdir(SESSIONS_DIR)
+	} catch {
+		return { count: 0 }
+	}
+	const jsonFiles = files.filter((f) => f.endsWith('.json'))
+	await Promise.all(jsonFiles.map((f) => unlink(`${SESSIONS_DIR}/${f}`)))
+	return { count: jsonFiles.length }
+}
+
+export async function clearSession(accountId: string): Promise<void> {
+	const safeId = pathBasename(accountId)
+	const filePath = `${SESSIONS_DIR}/${safeId}.json`
+	try {
+		await access(filePath, constants.F_OK)
+	} catch {
+		throw new Error(`No session found for account '${accountId}'`)
+	}
+	await unlink(filePath)
 }
