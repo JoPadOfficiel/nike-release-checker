@@ -16,9 +16,30 @@ program
 	.command('import-accounts')
 	.description('Import Nike account configurations from a JSON file')
 	.requiredOption('--file <path>', 'Path to the accounts JSON file')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.action(async (opts: { file: string }) => {
+		const { importAccounts, formatImportSummary } = await import('../auth/accountManager.ts')
+		const { loadAccountsFile } = await import('../config/accountConfig.ts')
+		try {
+			// Pre-load valid accounts list for display (before import overwrites)
+			const { valid } = await loadAccountsFile(opts.file)
+			const result = await importAccounts(opts.file)
+
+			const lines = formatImportSummary(
+				result,
+				valid.map((a) => ({ id: a.id, email: a.email, proxy: a.proxy })),
+			)
+			for (const line of lines) console.log(line)
+
+			if (result.errors.length > 0) {
+				console.log('\nErrors:')
+				for (const err of result.errors) {
+					console.log(`  ${err.accountId !== 'unknown' ? err.accountId : '?'}: ${err.reason}`)
+				}
+			}
+		} catch (err) {
+			console.error(`❌ Import failed: ${String(err)}`)
+			process.exit(1)
+		}
 	})
 
 program

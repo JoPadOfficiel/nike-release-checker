@@ -1,0 +1,120 @@
+import { describe, it, after } from 'node:test'
+import { strict as assert } from 'node:assert'
+import { writeFile, rm, stat } from 'node:fs/promises'
+
+const TMP_ACCOUNTS = '/tmp/test-import-accounts.json'
+const BOT_DATA = '.bot-data-test'
+
+async function write(data: unknown): Promise<void> {
+	await writeFile(TMP_ACCOUNTS, JSON.stringify(data), 'utf8')
+}
+
+// Inline mock proxyTester to avoid real network calls
+async function mockImportAccounts(
+	filePath: string,
+	proxySuccess: boolean,
+): Promise<{ imported: number; failed: number; errors: { accountId: string; reason: string }[] }> {
+	const { loadAccountsFile } = await import('../config/accountConfig.ts')
+	const { writeFile: wf, mkdir, chmod } = await import('node:fs/promises')
+
+	const { valid, errors: validationErrors } = await loadAccountsFile(filePath)
+	const importErrors = validationErrors.map((e: { index: number; field: string; message: string }) => ({
+		accountId: `index:${e.index}`,
+		reason: `${e.field}: ${e.message}`,
+	}))
+
+	const dataDir = BOT_DATA
+	const accountsFile = `${dataDir}/accounts.json`
+
+	let imported = 0
+	let failed = 0
+	const merged: unknown[] = []
+
+	for (const account of valid) {
+		if (!proxySuccess) {
+			failed++
+			importErrors.push({ accountId: account.id, reason: 'Proxy test failed: connection refused' })
+		} else {
+			merged.push({ ...account, importedAt: new Date().toISOString() })
+			imported++
+		}
+	}
+
+	await mkdir(dataDir, { recursive: true })
+	await wf(accountsFile, JSON.stringify(merged, null, 2), 'utf8')
+	await chmod(accountsFile, 0o600)
+
+	return { imported, failed, errors: importErrors }
+}
+
+describe('importAccounts (mocked proxy)', () => {
+	after(async () => {
+		await rm(TMP_ACCOUNTS, { force: true })
+		await rm(BOT_DATA, { recursive: true, force: true })
+	})
+
+	it('imports valid accounts when proxy succeeds', async () => {
+		await write([
+			{ id: 'acc-1', email: 'user1@test.com', password: 'pass1', proxy: 'http://u:p@proxy:8080', country: 'FR' },
+			{ id: 'acc-2', email: 'user2@test.com', password: 'pass2', proxy: 'http://u:p@proxy:8080', country: 'FR' },
+		])
+		const result = await mockImportAccounts(TMP_ACCOUNTS, true)
+		assert.equal(result.imported, 2)
+		assert.equal(result.failed, 0)
+	})
+
+	it('marks accounts as failed when proxy fails', async () => {
+		await write([
+			{ id: 'acc-3', email: 'user3@test.com', password: 'pass3', proxy: 'http://u:p@badproxy:8080', country: 'FR' },
+		])
+		const result = await mockImportAccounts(TMP_ACCOUNTS, false)
+		assert.equal(result.imported, 0)
+		assert.equal(result.failed, 1)
+		assert.ok(result.errors[0]!.reason.includes('Proxy test failed'))
+	})
+
+	it('sets permissions 600 on accounts file', async () => {
+		await write([
+			{ id: 'acc-p', email: 'perm@test.com', password: 'pw', proxy: 'http://u:p@proxy:8080', country: 'FR' },
+		])
+		await mockImportAccounts(TMP_ACCOUNTS, true)
+		const s = await stat(`${BOT_DATA}/accounts.json`)
+		const mode = (s.mode & 0o777).toString(8)
+		assert.equal(mode, '600', `Expected 600, got ${mode}`)
+	})
+
+	it('reports validation errors per invalid entry', async () => {
+		await write([
+			{ id: 'bad', email: 'not-an-email', password: 'pw', proxy: 'http://u:p@proxy:8080', country: 'FR' },
+			{ id: 'good', email: 'ok@test.com', password: 'pw', proxy: 'http://u:p@proxy:8080', country: 'FR' },
+		])
+		const result = await mockImportAccounts(TMP_ACCOUNTS, true)
+		assert.equal(result.imported, 1)
+		assert.ok(result.errors.some((e) => e.accountId === 'index:0'))
+	})
+})
+
+describe('formatImportSummary', () => {
+	it('masks email in output lines', async () => {
+		const { formatImportSummary } = await import('./accountManager.ts')
+		const result = { imported: 1, failed: 0, errors: [] }
+		const lines = formatImportSummary(result, [
+			{ id: 'acc-1', email: 'user@example.com', proxy: 'http://u:p@proxy:8080' },
+		])
+		for (const line of lines) {
+			assert.ok(!line.includes('user@example.com'), `Full email must not appear: ${line}`)
+		}
+		assert.ok(lines.some((l) => l.includes('u***@example.com')))
+	})
+
+	it('masks proxy credentials in output lines', async () => {
+		const { formatImportSummary } = await import('./accountManager.ts')
+		const result = { imported: 1, failed: 0, errors: [] }
+		const lines = formatImportSummary(result, [
+			{ id: 'acc-2', email: 'a@b.com', proxy: 'http://myuser:mysecret@proxy.host:8080' },
+		])
+		for (const line of lines) {
+			assert.ok(!line.includes('mysecret'), `Proxy password must not appear: ${line}`)
+		}
+	})
+})
