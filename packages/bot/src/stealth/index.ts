@@ -1,6 +1,8 @@
 export { createStealthContext } from './contextFactory.ts'
 export { parseProxyUrl, testProxy } from './proxyValidator.ts'
 export { createCheckoutContext } from './checkoutContext.ts'
+export { buildLocaleConfig } from './localeConfig.ts'
 export type { StealthContextOptions } from './contextFactory.ts'
 export type { ProxyTestResult } from './proxyValidator.ts'
 export type { CheckoutContextOptions } from './checkoutContext.ts'
+export type { LocaleConfig } from './localeConfig.ts'
