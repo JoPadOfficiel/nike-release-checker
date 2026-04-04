@@ -83,10 +83,29 @@ describe('validateSession', () => {
 		assert.equal(result.status, 'valid')
 	})
 
-	it('returns valid when no sid cookie is present (no critical cookie to fail on)', async () => {
+	it('returns expired when no sid cookie is present (sid required to confirm validity)', async () => {
 		await write([cookie({ name: 'cf_clearance', domain: 'accounts.nike.com', expires: now() + 86400 })])
 		const result = await validateSession(ID, SESSIONS_DIR)
+		assert.equal(result.status, 'expired')
+	})
+
+	it('returns expired when sid has leading-dot domain (.accounts.nike.com) and is expired', async () => {
+		await write([cookie({ domain: '.accounts.nike.com', expires: now() - 3600 })])
+		const result = await validateSession(ID, SESSIONS_DIR)
+		assert.equal(result.status, 'expired')
+	})
+
+	it('returns valid when sid has leading-dot domain (.accounts.nike.com) and is not expired', async () => {
+		await write([cookie({ domain: '.accounts.nike.com', expires: now() + 3600 })])
+		const result = await validateSession(ID, SESSIONS_DIR)
 		assert.equal(result.status, 'valid')
+	})
+
+	it('returns expired (not TypeError) when cookie array contains null items', async () => {
+		// Malformed session file with null items alongside valid cookies — no sid present → expired
+		await writeFile(FILE, JSON.stringify([null, { name: 'cf_clearance', domain: '.nike.com', expires: now() + 86400 }]), 'utf8')
+		const result = await validateSession(ID, SESSIONS_DIR)
+		assert.equal(result.status, 'expired')
 	})
 
 	it('counts unique domains in domainCount', async () => {
