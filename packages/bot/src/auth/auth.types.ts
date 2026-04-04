@@ -29,6 +29,26 @@ export interface AuthResult {
 	durationMs: number
 }
 
+export type SessionStatus = 'valid' | 'expired' | 'missing'
+
+export interface SessionValidationResult {
+	status: SessionStatus
+	error?: string
+	lastLogin?: Date
+	expiresAt?: number
+	expiredAt?: number
+	domainCount?: number
+}
+
+export interface AccountStatusRow {
+	id: string
+	email: string
+	country: string
+	proxy: string
+	session: SessionValidationResult
+	preferredSizes?: string[]
+}
+
 export interface CookieData {
 	name: string
 	value: string

@@ -1,5 +1,6 @@
-export { importAccounts, authenticateAll, authenticateSingle, loadStoredAccounts, formatImportSummary } from './accountManager.ts'
+export { importAccounts, authenticateAll, authenticateSingle, loadStoredAccounts, formatImportSummary, listAccounts } from './accountManager.ts'
 export { testProxyConnectivity } from './proxyTester.ts'
 export { performNikeLogin } from './loginFlow.ts'
 export { captureCookies, persistCookies } from './cookieStore.ts'
-export type { ImportResult, ProxyTestResult, AccountImportError, LoginResult, AuthResult, CookieData } from './auth.types.ts'
+export { validateSession } from './sessionValidator.ts'
+export type { ImportResult, ProxyTestResult, AccountImportError, LoginResult, AuthResult, CookieData, SessionStatus, SessionValidationResult, AccountStatusRow } from './auth.types.ts'
