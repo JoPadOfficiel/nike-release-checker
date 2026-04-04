@@ -178,12 +178,58 @@ program
 	.command('start')
 	.description('Start monitoring and automatic checkout')
 	.requiredOption('--slug <slug>', 'Nike product slug to monitor')
-	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
-	.option('--auto-checkout', 'Automatically trigger checkout when stock is detected', false)
+	.requiredOption('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
+	.requiredOption('--url <url>', 'Product URL for checkout')
 	.option('--daemon', 'Run as background daemon', false)
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.option('--dry-run', 'Simulate checkout without placing real orders', false)
+	.option('--no-auto-checkout', 'Disable automatic checkout trigger')
+	.action(async (opts: { slug: string; sizes: string; url: string; daemon?: boolean; dryRun?: boolean; autoCheckout?: boolean }) => {
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		const { loadBotConfig } = await import('../config/botConfig.ts')
+		const { startMonitorAndCheckout } = await import('../monitor/autoCheckout.ts')
+		const configPath = program.opts<{ config: string }>().config
+
+		try {
+			const config = await loadBotConfig(configPath)
+
+			if (opts.daemon) {
+				const { daemonize } = await import('../daemon/daemonize.ts')
+				daemonize(process.argv.slice(2).filter((a) => a !== '--daemon'))
+				// daemonize never returns
+			}
+
+			const controller = new AbortController()
+
+			// Write PID file for the foreground process
+			const { writePidFile, removePidFile } = await import('../daemon/daemonize.ts')
+			writePidFile()
+
+			const shutdown = async () => {
+				controller.abort()
+				removePidFile()
+			}
+
+			process.on('SIGINT', () => { void shutdown() })
+			process.on('SIGTERM', () => { void shutdown() })
+
+			const targetSizes = opts.sizes.split(',').map((s) => s.trim())
+
+			await startMonitorAndCheckout(
+				{
+					slug: opts.slug,
+					productUrl: opts.url,
+					targetSizes,
+					dryRun: opts.dryRun ?? false,
+					configPath,
+					autoCheckout: opts.autoCheckout !== false,
+				},
+				config,
+				controller,
+			)
+		} catch (err) {
+			console.error(`❌ Start failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
 	})
 
 program
