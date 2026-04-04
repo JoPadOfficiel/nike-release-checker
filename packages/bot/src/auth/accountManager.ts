@@ -8,6 +8,7 @@ import { createStealthContext } from '../stealth/contextFactory.ts'
 import { performNikeLogin } from './loginFlow.ts'
 import { captureCookies, persistCookies } from './cookieStore.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
+import type { Selectors } from '../config/selectorSchema.ts'
 import type { ImportResult, AuthResult } from './auth.types.ts'
 
 const DATA_DIR = '.bot-data'
@@ -125,44 +126,64 @@ export async function loadStoredAccounts(): Promise<(AccountConfig & { importedA
 	return parsed as (AccountConfig & { importedAt: string })[]
 }
 
+// Shared per-account login logic — used by both authenticateAll() and authenticateSingle()
+async function authenticateAccount(
+	account: AccountConfig & { importedAt: string },
+	selectors: Selectors,
+): Promise<AuthResult> {
+	const startMs = Date.now()
+	const context = await createStealthContext(account.proxy)
+	try {
+		const page = await context.newPage()
+		const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
+		if (loginResult.success) {
+			const cookies = await captureCookies(context)
+			await persistCookies(account.id, cookies)
+			return { accountId: account.id, success: true, durationMs: Date.now() - startMs }
+		}
+		return {
+			accountId: account.id,
+			success: false,
+			// Mask credentials that may appear in Nike's error page text (NFR6)
+			error: maskCredentials(loginResult.error ?? 'unknown error'),
+			durationMs: Date.now() - startMs,
+		}
+	} catch (err) {
+		return {
+			accountId: account.id,
+			success: false,
+			error: maskCredentials(String(err)),
+			durationMs: Date.now() - startMs,
+		}
+	} finally {
+		// Suppress close errors so they don't replace the original error already in results
+		await context.close().catch(() => undefined)
+	}
+}
+
 export async function authenticateAll(): Promise<AuthResult[]> {
 	const accounts = await loadStoredAccounts()
 	const selectors = await loadSelectors()
 	const results: AuthResult[] = []
-
 	for (const account of accounts) {
-		const startMs = Date.now()
-		const context = await createStealthContext(account.proxy)
-		try {
-			const page = await context.newPage()
-			const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
-			if (loginResult.success) {
-				const cookies = await captureCookies(context)
-				await persistCookies(account.id, cookies)
-				results.push({ accountId: account.id, success: true, durationMs: Date.now() - startMs })
-			} else {
-				results.push({
-					accountId: account.id,
-					success: false,
-					// Mask credentials that may appear in Nike's error page text (NFR6)
-					error: maskCredentials(loginResult.error ?? 'unknown error'),
-					durationMs: Date.now() - startMs,
-				})
-			}
-		} catch (err) {
-			results.push({
-				accountId: account.id,
-				success: false,
-				error: maskCredentials(String(err)),
-				durationMs: Date.now() - startMs,
-			})
-		} finally {
-			// Suppress close errors so they don't replace the original error already in results
-			await context.close().catch(() => undefined)
+		results.push(await authenticateAccount(account, selectors))
+	}
+	return results
+}
+
+export async function authenticateSingle(accountId: string): Promise<AuthResult> {
+	const accounts = await loadStoredAccounts()
+	const account = accounts.find((a) => a.id === accountId)
+	if (!account) {
+		return {
+			accountId,
+			success: false,
+			error: `Account '${accountId}' not found in imported accounts`,
+			durationMs: 0,
 		}
 	}
-
-	return results
+	const selectors = await loadSelectors()
+	return authenticateAccount(account, selectors)
 }
 
 export function formatImportSummary(

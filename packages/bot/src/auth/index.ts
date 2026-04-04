@@ -1,4 +1,4 @@
-export { importAccounts, authenticateAll, loadStoredAccounts, formatImportSummary } from './accountManager.ts'
+export { importAccounts, authenticateAll, authenticateSingle, loadStoredAccounts, formatImportSummary } from './accountManager.ts'
 export { testProxyConnectivity } from './proxyTester.ts'
 export { performNikeLogin } from './loginFlow.ts'
 export { captureCookies, persistCookies } from './cookieStore.ts'

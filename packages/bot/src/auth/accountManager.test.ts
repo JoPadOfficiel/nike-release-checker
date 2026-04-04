@@ -163,3 +163,30 @@ describe('loadStoredAccounts resilience', () => {
 		assert.ok(Array.isArray(result))
 	})
 })
+
+describe('authenticateSingle', () => {
+	it('returns not-found error for an unknown account ID', async () => {
+		const { authenticateSingle } = await import('./accountManager.ts')
+		// No accounts imported in this environment — any ID will be "not found"
+		const result = await authenticateSingle('no-such-account-id')
+		assert.equal(result.success, false)
+		assert.ok(
+			result.error?.includes('not found'),
+			`Expected "not found" in error: ${result.error}`,
+		)
+		assert.ok(
+			result.error?.includes('no-such-account-id'),
+			`Expected account ID in error: ${result.error}`,
+		)
+		assert.equal(result.accountId, 'no-such-account-id')
+		assert.equal(result.durationMs, 0)
+	})
+
+	it('returns not-found error without throwing when accounts file is absent', async () => {
+		const { authenticateSingle } = await import('./accountManager.ts')
+		// Should return a result, never throw
+		const result = await authenticateSingle('ghost-id')
+		assert.equal(result.success, false)
+		assert.ok(result.error?.includes('not found'))
+	})
+})
