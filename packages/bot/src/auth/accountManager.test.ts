@@ -239,30 +239,30 @@ describe('clearAllSessions', () => {
 	const SESS_DIR = '.bot-data/sessions'
 
 	before(async () => {
+		// Remove any stale files then create exactly 2 known files
+		await rm(SESS_DIR, { recursive: true, force: true })
 		await mkdir(SESS_DIR, { recursive: true })
 		await writeFile(`${SESS_DIR}/clr-acc-1.json`, '[]', { encoding: 'utf8', mode: 0o600 })
 		await writeFile(`${SESS_DIR}/clr-acc-2.json`, '[]', { encoding: 'utf8', mode: 0o600 })
 	})
 
 	after(async () => {
-		// best-effort cleanup of any leftover test files
-		for (const id of ['clr-acc-1', 'clr-acc-2']) {
-			await rm(`${SESS_DIR}/${id}.json`, { force: true })
-		}
+		await rm(SESS_DIR, { recursive: true, force: true })
 	})
 
 	it('deletes all .json session files and returns the count', async () => {
 		const { clearAllSessions } = await import('./accountManager.ts')
 		const { count } = await clearAllSessions()
-		assert.ok(count >= 2, `Expected at least 2 deleted, got ${count}`)
-		// files must be gone
+		assert.equal(count, 2)
 		await assert.rejects(() => access(`${SESS_DIR}/clr-acc-1.json`))
 		await assert.rejects(() => access(`${SESS_DIR}/clr-acc-2.json`))
 	})
 
 	it('returns count 0 when sessions directory does not exist', async () => {
 		const { clearAllSessions } = await import('./accountManager.ts')
-		// directory already cleared by previous test (or absent)
+		// directory was cleaned by previous test's after() — but we're still in same describe
+		// Remove to ensure it's gone
+		await rm(SESS_DIR, { recursive: true, force: true })
 		const { count } = await clearAllSessions()
 		assert.equal(count, 0)
 	})
