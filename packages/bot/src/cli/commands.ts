@@ -201,16 +201,10 @@ program
 			const controller = new AbortController()
 
 			// Write PID file for the foreground process
-			const { writePidFile, removePidFile } = await import('../daemon/daemonize.ts')
+			const { writePidFile } = await import('../daemon/daemonize.ts')
+			const { setupGracefulShutdown } = await import('../daemon/gracefulShutdown.ts')
 			writePidFile()
-
-			const shutdown = async () => {
-				controller.abort()
-				removePidFile()
-			}
-
-			process.on('SIGINT', () => { void shutdown() })
-			process.on('SIGTERM', () => { void shutdown() })
+			setupGracefulShutdown(controller)
 
 			const targetSizes = opts.sizes.split(',').map((s) => s.trim())
 
