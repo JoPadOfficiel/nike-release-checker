@@ -7,7 +7,7 @@
 	"bin": { "nike-bot": "./src/cli/index.ts" },
 	"scripts": {
 		"dev": "node --import tsx --watch src/cli/index.ts",
-		"test": "node --test 'src/**/__tests__/**/*.test.ts'",
+		"test": "node --test 'src/**/*.test.ts'",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
