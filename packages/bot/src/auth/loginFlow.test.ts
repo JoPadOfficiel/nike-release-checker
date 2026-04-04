@@ -21,6 +21,16 @@ const SEL: Selectors = {
 	soldOutIndicator: '.sold-out',
 	blockDetectionSignal: '.block',
 	threeDSecureIframe: 'iframe',
+	productPage: { sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '' },
+	cart: { checkoutButton: '', cartCount: '' },
+	checkout: {
+		shippingContinueButton: '',
+		paymentSection: '',
+		paymentContinueButton: '',
+		threeDSIframe: '',
+		submitOrderButton: '',
+		orderConfirmation: '',
+	},
 }
 
 function makeMockPage(scenario: 'success' | 'error' | 'timeout' | 'goto-throws'): Page {

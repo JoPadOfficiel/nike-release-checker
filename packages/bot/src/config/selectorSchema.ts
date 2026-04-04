@@ -32,6 +32,46 @@ export const SelectorsSchema = v.object({
 
 	// 3D Secure detection
 	threeDSecureIframe: v.string(),
+
+	// Product page — checkout pipeline selectors
+	productPage: v.optional(
+		v.object({
+			sizeGrid: v.optional(v.string(), ''),
+			sizeButton: v.optional(v.string(), ''),
+			addToCartButton: v.optional(v.string(), ''),
+			soldOutIndicator: v.optional(v.string(), ''),
+		}),
+		{ sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '' },
+	),
+
+	// Cart
+	cart: v.optional(
+		v.object({
+			checkoutButton: v.optional(v.string(), ''),
+			cartCount: v.optional(v.string(), ''),
+		}),
+		{ checkoutButton: '', cartCount: '' },
+	),
+
+	// Checkout pipeline selectors
+	checkout: v.optional(
+		v.object({
+			shippingContinueButton: v.optional(v.string(), ''),
+			paymentSection: v.optional(v.string(), ''),
+			paymentContinueButton: v.optional(v.string(), ''),
+			threeDSIframe: v.optional(v.string(), ''),
+			submitOrderButton: v.optional(v.string(), ''),
+			orderConfirmation: v.optional(v.string(), ''),
+		}),
+		{
+			shippingContinueButton: '',
+			paymentSection: '',
+			paymentContinueButton: '',
+			threeDSIframe: '',
+			submitOrderButton: '',
+			orderConfirmation: '',
+		},
+	),
 })
 
 export type Selectors = v.InferOutput<typeof SelectorsSchema>
