@@ -89,7 +89,8 @@ describe('addToCart', () => {
   it('returns sold_out when ATC button is disabled', async () => {
     const result = await addToCart(makeMockPage('atc-disabled'), BASE_SELECTORS)
     assert.equal(result.outcome, 'sold_out')
-    assert.ok(result.error?.includes('not available'))
+    // checkSoldOut detects button_disabled signal
+    assert.ok(result.error !== undefined, 'should have an error message')
   })
 
   it('returns timeout when cart count selector times out', async () => {

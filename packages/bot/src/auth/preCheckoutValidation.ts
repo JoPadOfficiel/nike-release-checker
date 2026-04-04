@@ -11,7 +11,7 @@ export interface SessionValidationResult {
 
 export async function validateAllSessions(): Promise<SessionValidationResult[]> {
   const accounts = await loadStoredAccounts()  // MUST await — async
-  return Promise.all(
+  const settled = await Promise.allSettled(
     accounts.map(async (account) => {
       const maskedEmail = maskEmail(account.email)
       const sessionResult = await validateSession(account.id)
@@ -24,6 +24,17 @@ export async function validateAllSessions(): Promise<SessionValidationResult[]> 
       return { accountId: account.id, email: maskedEmail, valid: true }
     }),
   )
+  return settled.map((result, i) => {
+    if (result.status === 'fulfilled') return result.value
+    // Validation threw unexpectedly — treat as invalid
+    const account = accounts[i]!
+    return {
+      accountId: account.id,
+      email: maskEmail(account.email),
+      valid: false,
+      reason: 'no_session' as const,
+    }
+  })
 }
 
 export function printValidationSummary(results: SessionValidationResult[]): void {

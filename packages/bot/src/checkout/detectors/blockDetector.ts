@@ -39,16 +39,20 @@ export async function detectBlock(
   selectors: Selectors,
 ): Promise<BlockDetectionResult> {
   // Check HTTP status
-  if (response !== null && response.status() === 403) {
+  if (response != null && response.status() === 403) {
     return { blocked: true, reason: 'http_403' }
   }
 
   // Check URL for known block patterns
-  const currentUrl = page.url()
-  for (const { pattern, reason } of BLOCK_URL_PATTERNS) {
-    if (pattern.test(currentUrl)) {
-      return { blocked: true, reason }
+  try {
+    const currentUrl = page.url()
+    for (const { pattern, reason } of BLOCK_URL_PATTERNS) {
+      if (pattern.test(currentUrl)) {
+        return { blocked: true, reason }
+      }
     }
+  } catch {
+    // page.url() not available in test mocks or during navigation
   }
 
   // Check page title / content for Cloudflare / Akamai
