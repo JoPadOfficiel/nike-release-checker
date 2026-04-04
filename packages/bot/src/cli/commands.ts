@@ -138,7 +138,11 @@ program
 		// Compute column widths
 		const widths = headers.map((h, i) => {
 			const key = keys[i]!
-			const maxVal = Math.max(...displayRows.map((r) => String((r as Record<string, string>)[key] ?? '').length))
+			// use reduce to avoid RangeError from spread on large account lists (P3)
+			const maxVal = displayRows.reduce(
+				(m, r) => Math.max(m, String((r as Record<string, string>)[key] ?? '').length),
+				0,
+			)
 			return Math.max(h.length, maxVal)
 		})
 
