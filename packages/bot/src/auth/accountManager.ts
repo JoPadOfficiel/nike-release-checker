@@ -144,7 +144,8 @@ export async function authenticateAll(): Promise<AuthResult[]> {
 				results.push({
 					accountId: account.id,
 					success: false,
-					error: loginResult.error,
+					// Mask credentials that may appear in Nike's error page text (NFR6)
+					error: maskCredentials(loginResult.error ?? 'unknown error'),
 					durationMs: Date.now() - startMs,
 				})
 			}
@@ -156,7 +157,8 @@ export async function authenticateAll(): Promise<AuthResult[]> {
 				durationMs: Date.now() - startMs,
 			})
 		} finally {
-			await context.close()
+			// Suppress close errors so they don't replace the original error already in results
+			await context.close().catch(() => undefined)
 		}
 	}
 
