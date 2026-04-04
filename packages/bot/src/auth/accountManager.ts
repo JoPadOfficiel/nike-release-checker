@@ -134,7 +134,7 @@ async function authenticateAccount(
 	selectors: Selectors,
 ): Promise<AuthResult> {
 	const startMs = Date.now()
-	const context = await createStealthContext(account.proxy)
+	const context = await createStealthContext({ proxy: account.proxy })
 	try {
 		const page = await context.newPage()
 		const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
