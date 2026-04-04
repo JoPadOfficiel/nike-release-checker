@@ -1,0 +1,43 @@
+import * as v from 'valibot'
+
+export const BotConfigSchema = v.object({
+	polling: v.optional(
+		v.object({
+			interval: v.optional(v.pipe(v.number(), v.minValue(1000)), 5000),
+			timeout: v.optional(v.pipe(v.number(), v.minValue(5000)), 30000),
+		}),
+		{ interval: 5000, timeout: 30000 },
+	),
+	checkout: v.optional(
+		v.object({
+			market: v.optional(v.string(), 'FR'),
+			language: v.optional(v.string(), 'fr'),
+			currency: v.optional(v.string(), 'EUR'),
+			defaultSizes: v.optional(v.array(v.string()), []),
+		}),
+		{ market: 'FR', language: 'fr', currency: 'EUR', defaultSizes: [] },
+	),
+	proxy: v.optional(
+		v.object({
+			rotationMode: v.optional(v.picklist(['per-account']), 'per-account'),
+			testOnImport: v.optional(v.boolean(), true),
+		}),
+		{ rotationMode: 'per-account', testOnImport: true },
+	),
+	stealth: v.optional(
+		v.object({
+			headless: v.optional(v.boolean(), true),
+			userAgent: v.optional(v.string(), 'auto'),
+		}),
+		{ headless: true, userAgent: 'auto' },
+	),
+	daemon: v.optional(
+		v.object({
+			logFile: v.optional(v.string(), './logs/bot.log'),
+			pidFile: v.optional(v.string(), './bot.pid'),
+		}),
+		{ logFile: './logs/bot.log', pidFile: './bot.pid' },
+	),
+})
+
+export type BotConfig = v.InferOutput<typeof BotConfigSchema>
