@@ -43,7 +43,10 @@ export function logStep(accountEmail: string, result: StepResult): void {
 
 export function log(level: LogLevel, message: string, extra?: Partial<LogEntry>): void {
   if (LEVELS[level] < LEVELS[minLevel]) return
-  writeEntry({ ts: new Date().toISOString(), level, message, ...extra })
+  const safeExtra = extra !== undefined && extra.account !== undefined
+    ? { ...extra, account: maskEmail(extra.account) }
+    : extra
+  writeEntry({ ts: new Date().toISOString(), level, message, ...safeExtra })
 }
 
 function writeEntry(entry: LogEntry): void {

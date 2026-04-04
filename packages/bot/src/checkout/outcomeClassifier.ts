@@ -16,6 +16,7 @@ export function classifyOutcome(steps: StepResult[]): FinalOutcome {
       case 'sold_out': return 'sold_out'
       case 'blocked': return 'blocked'
       case '3ds_timeout': return '3ds_timeout'
+      case '3ds_required': return 'error' // 3DS was required but never resolved — treat as error
       case 'timeout': return 'timeout'
       case 'no_session': return 'no_session'
       case 'error': return 'error'
@@ -36,5 +37,11 @@ export function outcomeMessage(outcome: FinalOutcome): string {
     case 'timeout': return 'Step timed out'
     case 'no_session': return 'No valid session — please login first'
     case 'error': return 'An unexpected error occurred'
+    default: {
+      // Defensive: unknown outcome should never happen with proper typing,
+      // but guards against unsafe `as` casts feeding invalid values.
+      const _exhaustive: never = outcome
+      return `Unknown outcome: ${_exhaustive}`
+    }
   }
 }

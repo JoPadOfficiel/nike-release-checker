@@ -6,6 +6,7 @@ export type BlockReason =
   | 'cloudflare_challenge'
   | 'captcha'
   | 'http_403'
+  | 'http_429'
   | 'block_indicator'
   | null
 
@@ -38,9 +39,15 @@ export async function detectBlock(
   response: Response | null,
   selectors: Selectors,
 ): Promise<BlockDetectionResult> {
-  // Check HTTP status
-  if (response != null && response.status() === 403) {
-    return { blocked: true, reason: 'http_403' }
+  // Check HTTP status — 403 (Forbidden) and 429 (Too Many Requests) both indicate blocks
+  if (response != null) {
+    const status = response.status()
+    if (status === 403) {
+      return { blocked: true, reason: 'http_403' }
+    }
+    if (status === 429) {
+      return { blocked: true, reason: 'http_429' }
+    }
   }
 
   // Check URL for known block patterns
