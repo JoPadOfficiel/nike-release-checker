@@ -97,16 +97,13 @@ export async function createStealthContext(
 
 	// Additional anti-detection: inject init script to hide automation signals.
 	// This runs before every page navigation in the context.
-	await context.addInitScript(() => {
-		// Hide webdriver flag — the most obvious automation signal
-		Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
-		// Fake plugin list (empty plugins array is another bot signal)
-		Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] })
-		// Report French languages
-		Object.defineProperty(navigator, 'languages', {
-			get: () => ['fr-FR', 'fr', 'en'],
-		})
-	})
+	// NOTE: must be a string, not a function — tsx/esbuild compiles arrow functions with
+	// `__name()` helper calls that are undefined in the browser, causing silent failures.
+	await context.addInitScript(`
+		Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+		Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+		Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'fr', 'en'] });
+	`)
 
 	// Close the underlying browser when the context is closed (resource cleanup)
 	context.on('close', () => void browser.close())
