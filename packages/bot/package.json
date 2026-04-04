@@ -13,6 +13,7 @@
 	"dependencies": {
 		"@nike-release-checker/sdk": "*",
 		"commander": "13.1.0",
+		"playwright": "^1.52.0",
 		"valibot": "1.3.0",
 		"yaml": "2.7.1"
 	},

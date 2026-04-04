@@ -41,10 +41,29 @@ program
 program
 	.command('login-all')
 	.description('Authenticate all accounts (or a single one with --account)')
-	.option('--account <id>', 'Account ID to authenticate')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.option('--account <id>', 'Account ID to authenticate (story 2-3)')
+	.action(async () => {
+		const { authenticateAll } = await import('../auth/accountManager.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		try {
+			const results = await authenticateAll()
+			let succeeded = 0
+			for (const r of results) {
+				const label = maskCredentials(r.accountId)
+				const elapsed = `${(r.durationMs / 1000).toFixed(1)}s`
+				if (r.success) {
+					succeeded++
+					console.log(`  ✓ ${label} — done (${elapsed})`)
+				} else {
+					console.log(`  ✗ ${label} — failed (${maskCredentials(r.error ?? 'unknown error')})`)
+				}
+			}
+			const total = results.length
+			console.log(`\n${succeeded}/${total} accounts authenticated. ${total - succeeded} failed.`)
+		} catch (err) {
+			console.error(`❌ Login failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
 	})
 
 program

@@ -1,6 +1,14 @@
 import * as v from 'valibot'
 
 export const SelectorsSchema = v.object({
+	// Login flow (accounts.nike.com)
+	loginEmailInput: v.string(),
+	loginContinueButton: v.string(),
+	loginPasswordInput: v.string(),
+	loginSubmitButton: v.string(),
+	loginSuccessIndicator: v.string(),
+	loginErrorIndicator: v.string(),
+
 	// Product page - size grid
 	sizeAvailable: v.string(),
 	sizeSelected: v.string(),

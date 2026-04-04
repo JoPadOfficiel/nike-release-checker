@@ -1,3 +1,5 @@
-export { importAccounts, loadStoredAccounts, formatImportSummary } from './accountManager.ts'
+export { importAccounts, authenticateAll, loadStoredAccounts, formatImportSummary } from './accountManager.ts'
 export { testProxyConnectivity } from './proxyTester.ts'
-export type { ImportResult, ProxyTestResult, AccountImportError } from './auth.types.ts'
+export { performNikeLogin } from './loginFlow.ts'
+export { captureCookies, persistCookies } from './cookieStore.ts'
+export type { ImportResult, ProxyTestResult, AccountImportError, LoginResult, AuthResult, CookieData } from './auth.types.ts'

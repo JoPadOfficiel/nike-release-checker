@@ -8,6 +8,12 @@ import { loadSelectors } from './index.ts'
 const tmpSelectors = join(tmpdir(), `test-selectors-${Date.now()}.yaml`)
 
 const VALID_YAML = `
+loginEmailInput: 'input[type="email"]'
+loginContinueButton: 'button[data-attr="continueBtn"]'
+loginPasswordInput: 'input[type="password"]'
+loginSubmitButton: 'button[data-attr="loginSubmitBtn"]'
+loginSuccessIndicator: '[data-attr="user-greeting"]'
+loginErrorIndicator: '.nike-unite-error-message'
 sizeAvailable: '[data-qa="size-available"]'
 sizeSelected: '[data-qa="size-available"][aria-checked="true"]'
 purchaseButton: '.ncss-btn-primary-dark.btn-lg'

@@ -1,10 +1,14 @@
 import { writeFile, mkdir, readFile, access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { loadAccountsFile } from '../config/accountConfig.ts'
+import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail, maskProxy, maskCredentials } from '../logger/credentialMasker.ts'
 import { testProxyConnectivity } from './proxyTester.ts'
+import { createStealthContext } from '../stealth/contextFactory.ts'
+import { performNikeLogin } from './loginFlow.ts'
+import { captureCookies, persistCookies } from './cookieStore.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
-import type { ImportResult } from './auth.types.ts'
+import type { ImportResult, AuthResult } from './auth.types.ts'
 
 const DATA_DIR = '.bot-data'
 const ACCOUNTS_FILE = `${DATA_DIR}/accounts.json`
@@ -119,6 +123,44 @@ export async function loadStoredAccounts(): Promise<(AccountConfig & { importedA
 	}
 	if (!Array.isArray(parsed)) return []
 	return parsed as (AccountConfig & { importedAt: string })[]
+}
+
+export async function authenticateAll(): Promise<AuthResult[]> {
+	const accounts = await loadStoredAccounts()
+	const selectors = await loadSelectors()
+	const results: AuthResult[] = []
+
+	for (const account of accounts) {
+		const startMs = Date.now()
+		const context = await createStealthContext(account.proxy)
+		try {
+			const page = await context.newPage()
+			const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
+			if (loginResult.success) {
+				const cookies = await captureCookies(context)
+				await persistCookies(account.id, cookies)
+				results.push({ accountId: account.id, success: true, durationMs: Date.now() - startMs })
+			} else {
+				results.push({
+					accountId: account.id,
+					success: false,
+					error: loginResult.error,
+					durationMs: Date.now() - startMs,
+				})
+			}
+		} catch (err) {
+			results.push({
+				accountId: account.id,
+				success: false,
+				error: maskCredentials(String(err)),
+				durationMs: Date.now() - startMs,
+			})
+		} finally {
+			await context.close()
+		}
+	}
+
+	return results
 }
 
 export function formatImportSummary(
