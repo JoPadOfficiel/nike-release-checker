@@ -7,6 +7,7 @@ import { maskEmail } from '../logger/credentialMasker.ts'
 import { logStep } from '../logger/logger.ts'
 import { printStepResult } from '../logger/terminal.ts'
 import type { StepResult, StepOutcome } from './executeStep.ts'
+import { classifyOutcome, type FinalOutcome } from './outcomeClassifier.ts'
 import { selectSize } from './steps/selectSize.ts'
 import { addToCart } from './steps/addToCart.ts'
 import { navigateCheckout } from './steps/navigateCheckout.ts'
@@ -19,7 +20,7 @@ export interface CheckoutPipelineResult {
   accountId: string
   accountEmail: string
   steps: StepResult[]
-  finalOutcome: StepOutcome | 'complete'
+  finalOutcome: FinalOutcome
   durationMs: number
 }
 
@@ -134,7 +135,7 @@ export async function runCheckoutPipeline(
       return buildResult(account.id, maskedEmail, steps, submitResult.outcome, pipelineStart)
     }
 
-    const finalOutcome = 'complete'
+    const finalOutcome = classifyOutcome(steps)
     console.log(`[checkout] Pipeline complete for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
     return {
@@ -160,7 +161,7 @@ function buildResult(
     accountId,
     accountEmail,
     steps,
-    finalOutcome: outcome,
+    finalOutcome: outcome as FinalOutcome,
     durationMs: Math.round(performance.now() - pipelineStart),
   }
 }

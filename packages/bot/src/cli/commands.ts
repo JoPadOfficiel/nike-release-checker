@@ -222,7 +222,7 @@ program
 				const status = step.outcome === 'success' ? '✓' : '✗'
 				console.log(`  ${status} ${step.step}: ${step.outcome}${step.details ? ` — ${step.details}` : ''}`)
 			}
-			if (result.finalOutcome !== 'complete' && result.finalOutcome !== 'no_session') {
+			if (result.finalOutcome !== 'success' && result.finalOutcome !== '3ds_success' && result.finalOutcome !== 'no_session') {
 				process.exit(1)
 			}
 		} catch (err) {

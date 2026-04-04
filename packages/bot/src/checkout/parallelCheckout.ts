@@ -82,9 +82,9 @@ export async function runParallelCheckout(
       const result = outcome.value
       results.push(result)
 
-      if (result.finalOutcome === 'complete') {
+      if (result.finalOutcome === 'success' || result.finalOutcome === '3ds_success') {
         complete++
-        console.log(`  ✓ ${maskedEmail} — complete`)
+        console.log(`  ✓ ${maskedEmail} — ${result.finalOutcome}`)
       } else if (result.finalOutcome === 'no_session') {
         noSession++
         console.log(`  - ${maskedEmail} — no session`)
