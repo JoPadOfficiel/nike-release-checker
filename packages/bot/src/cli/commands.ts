@@ -191,9 +191,91 @@ program
 	.description('Test the full checkout flow without placing an order')
 	.requiredOption('--slug <slug>', 'Nike product slug')
 	.requiredOption('--profile <account_id>', 'Account ID to use for the dry run')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
+	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string }) => {
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+		const { loadBotConfig } = await import('../config/botConfig.ts')
+		const { loadSelectors } = await import('../config/selectors.ts')
+		const { runCheckoutPipeline } = await import('../checkout/checkoutPipeline.ts')
+		const configPath = program.opts<{ config: string }>().config
+		try {
+			const accounts = await loadStoredAccounts()
+			const account = accounts.find((a) => a.id === opts.profile)
+			if (!account) {
+				console.error(`Error: Account '${opts.profile}' not found.`)
+				process.exit(1)
+			}
+			const config = await loadBotConfig(configPath)
+			const selectors = await loadSelectors(opts.selectors)
+			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : account.preferredSizes ?? []
+			const productUrl = `https://www.nike.com/fr/launch/t/${opts.slug}`
+			console.log(`[DRY-RUN] Starting dry-run for slug: ${opts.slug}`)
+			const result = await runCheckoutPipeline(account, config, selectors, {
+				productUrl,
+				targetSizes,
+				dryRun: true,
+			})
+			console.log(`[DRY-RUN] Result: ${result.finalOutcome} (${result.durationMs}ms)`)
+			for (const step of result.steps) {
+				const status = step.outcome === 'success' ? '✓' : '✗'
+				console.log(`  ${status} ${step.step}: ${step.outcome}${step.details ? ` — ${step.details}` : ''}`)
+			}
+			if (result.finalOutcome !== 'complete' && result.finalOutcome !== 'no_session') {
+				process.exit(1)
+			}
+		} catch (err) {
+			console.error(`❌ Dry-run failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
+	})
+
+program
+	.command('checkout')
+	.description('Run the checkout pipeline for all accounts (or a single one)')
+	.requiredOption('--slug <slug>', 'Nike product slug to checkout')
+	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
+	.option('--account <id>', 'Run checkout for a single account by ID')
+	.option('--dry-run', 'Simulate checkout without placing real orders', false)
+	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.action(async (opts: { slug: string; sizes?: string; account?: string; dryRun?: boolean; selectors?: string }) => {
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		const { runParallelCheckout } = await import('../checkout/parallelCheckout.ts')
+		const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+		const configPath = program.opts<{ config: string }>().config
+		try {
+			const productUrl = `https://www.nike.com/fr/launch/t/${opts.slug}`
+			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : undefined
+			const dryRun = opts.dryRun ?? false
+
+			let accounts
+			if (opts.account) {
+				const all = await loadStoredAccounts()
+				const found = all.find((a) => a.id === opts.account)
+				if (!found) {
+					console.error(`Error: Account '${opts.account}' not found.`)
+					process.exit(1)
+				}
+				accounts = [found]
+			}
+
+			const summary = await runParallelCheckout({
+				productUrl,
+				targetSizes,
+				dryRun,
+				configPath,
+				selectorsPath: opts.selectors,
+				accounts,
+			})
+
+			if (summary.complete === 0 && summary.total > 0) {
+				process.exit(1)
+			}
+		} catch (err) {
+			console.error(`❌ Checkout failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
 	})
 
 program
