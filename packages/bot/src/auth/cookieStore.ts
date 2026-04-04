@@ -87,8 +87,15 @@ export async function loadCookies(
 export async function injectCookies(context: BrowserContext, cookies: CookieData[]): Promise<void> {
 	if (cookies.length === 0) return
 	await context.addCookies(cookies)
-	const domains = [...new Set(cookies.map((c) => c.domain.replace(/^\./, '')))]
-	console.log(`Injected ${cookies.length} cookies across ${domains.length} domains (${domains.join(', ')})`)
+	const byDomain = cookies.reduce<Record<string, number>>((acc, c) => {
+		const domain = c.domain.replace(/^\./, '')
+		acc[domain] = (acc[domain] ?? 0) + 1
+		return acc
+	}, {})
+	const domainSummary = Object.entries(byDomain)
+		.map(([d, n]) => `${d}: ${n}`)
+		.join(', ')
+	console.log(`Injected ${cookies.length} cookies (${domainSummary})`)
 }
 
 export async function loadAndInjectCookies(

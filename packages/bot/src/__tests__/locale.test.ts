@@ -22,7 +22,10 @@ describe('buildLocaleConfig', () => {
 
 	it('FR market returns correct Accept-Language header', () => {
 		const cfg = buildLocaleConfig('FR')
-		assert.ok(cfg.extraHTTPHeaders['Accept-Language']?.startsWith('fr-FR'))
+		assert.equal(
+			cfg.extraHTTPHeaders['Accept-Language'],
+			'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+		)
 	})
 
 	it('throws for unsupported market', () => {

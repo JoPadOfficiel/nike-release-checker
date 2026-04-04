@@ -56,7 +56,8 @@ export async function createCheckoutContext(
 	} catch (err) {
 		// If cookie injection fails for any reason, close the context immediately.
 		// We do NOT want to leave orphaned browser contexts.
-		await context.close()
+		// Suppress close() errors so the original error is always re-thrown.
+		try { await context.close() } catch {}
 		throw err
 	}
 }

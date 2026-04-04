@@ -1,8 +1,11 @@
 import type { BrowserContext } from 'playwright'
+import { maskProxy } from '../logger/credentialMasker.ts'
 
 export type ProxyTestResult =
 	| { status: 'ok'; ip: string; latencyMs: number }
 	| { status: 'error'; reason: string }
+
+const ALLOWED_PROXY_SCHEMES = ['http:', 'https:', 'socks4:', 'socks5:']
 
 /**
  * Tests proxy connectivity by loading a lightweight external URL.
@@ -24,7 +27,7 @@ export async function testProxy(
 		page = await context.newPage()
 		const response = await page.goto(testUrl, {
 			timeout: 10_000,
-			waitUntil: 'networkidle',
+			waitUntil: 'load',
 		})
 		if (!response?.ok()) {
 			return {
@@ -32,7 +35,21 @@ export async function testProxy(
 				reason: `HTTP ${response?.status() ?? 'unknown'} from ${testUrl}`,
 			}
 		}
-		const body = (await response.json()) as { ip: string }
+		let body: { ip?: unknown }
+		try {
+			body = (await response.json()) as { ip?: unknown }
+		} catch {
+			return {
+				status: 'error',
+				reason: `Non-JSON response from ${testUrl} (possible captcha or proxy interception)`,
+			}
+		}
+		if (typeof body.ip !== 'string' || !body.ip) {
+			return {
+				status: 'error',
+				reason: `Unexpected response shape from ${testUrl}: ${JSON.stringify(body)}`,
+			}
+		}
 		const latencyMs = Math.round(performance.now() - start)
 		return { status: 'ok', ip: body.ip, latencyMs }
 	} catch (err) {
@@ -51,6 +68,7 @@ export async function testProxy(
  *
  * @param proxyUrl - Full proxy URL, e.g. http://user:pass@host:port
  * @returns Object with server, username (optional), password (optional)
+ * @throws if the URL is invalid, scheme is unsupported, or hostname is missing
  *
  * @example
  * parseProxyUrl('http://admin:secret@proxy.example.com:8080')
@@ -64,10 +82,51 @@ export function parseProxyUrl(proxyUrl: string): {
 	username?: string
 	password?: string
 } {
-	const url = new URL(proxyUrl)
+	let url: URL
+	try {
+		url = new URL(proxyUrl)
+	} catch {
+		throw new Error(`parseProxyUrl: invalid proxy URL: ${proxyUrl}`)
+	}
+	if (!ALLOWED_PROXY_SCHEMES.includes(url.protocol)) {
+		throw new Error(
+			`parseProxyUrl: unsupported scheme '${url.protocol}' in '${proxyUrl}'. Allowed: ${ALLOWED_PROXY_SCHEMES.join(', ')}`,
+		)
+	}
+	if (!url.hostname) {
+		throw new Error(`parseProxyUrl: missing hostname in proxy URL: ${proxyUrl}`)
+	}
+	// Use explicit port if provided; fall back to scheme defaults to avoid trailing colon
+	const port =
+		url.port ||
+		(url.protocol === 'https:' ? '443' : url.protocol === 'http:' ? '80' : null)
+	if (!port) {
+		throw new Error(
+			`parseProxyUrl: missing port in proxy URL (required for ${url.protocol}): ${proxyUrl}`,
+		)
+	}
 	return {
-		server: `${url.protocol}//${url.hostname}:${url.port}`,
+		server: `${url.protocol}//${url.hostname}:${port}`,
 		username: url.username || undefined,
 		password: url.password || undefined,
 	}
+}
+
+/**
+ * Masks proxy credentials for safe logging.
+ * Delegates to the credential masker — wraps it under the stealth module's public API.
+ */
+export function maskProxyUrl(proxyUrl: string): string {
+	return maskProxy(proxyUrl)
+}
+
+/**
+ * Formats a proxy error with masked credentials for logging.
+ *
+ * @param accountId - The account identifier
+ * @param proxyUrl - The proxy URL (credentials will be masked)
+ * @param error - The error that occurred
+ */
+export function formatProxyError(accountId: string, proxyUrl: string, error: Error): string {
+	return `[${accountId}] Proxy connection failed: ${maskProxy(proxyUrl)} — ${error.message}`
 }
