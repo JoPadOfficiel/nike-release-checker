@@ -26,6 +26,7 @@ const BASE_SELECTORS: Selectors = {
     sizeButton: '',
     addToCartButton: '',
     soldOutIndicator: '',
+    blockIndicator: '',
   },
   cart: { checkoutButton: '[data-qa="checkout-button"]', cartCount: '' },
   checkout: {

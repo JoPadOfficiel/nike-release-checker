@@ -21,7 +21,7 @@ const BASE_SELECTORS: Selectors = {
   soldOutIndicator: '',
   blockDetectionSignal: '',
   threeDSecureIframe: '',
-  productPage: { sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '' },
+  productPage: { sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '', blockIndicator: '' },
   cart: { checkoutButton: '', cartCount: '' },
   checkout: {
     shippingContinueButton: '',

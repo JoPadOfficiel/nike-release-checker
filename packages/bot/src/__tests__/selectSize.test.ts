@@ -26,6 +26,7 @@ const BASE_SELECTORS: Selectors = {
     sizeButton: '[data-testid="size-{size}"]',
     addToCartButton: '[data-testid="atc-button"]',
     soldOutIndicator: '[data-testid="sold-out"]',
+    blockIndicator: '',
   },
   cart: { checkoutButton: '', cartCount: '' },
   checkout: {

@@ -40,8 +40,9 @@ export const SelectorsSchema = v.object({
 			sizeButton: v.optional(v.string(), ''),
 			addToCartButton: v.optional(v.string(), ''),
 			soldOutIndicator: v.optional(v.string(), ''),
+			blockIndicator: v.optional(v.string(), ''),
 		}),
-		{ sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '' },
+		{ sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '', blockIndicator: '' },
 	),
 
 	// Cart

@@ -21,7 +21,7 @@ const SEL: Selectors = {
 	soldOutIndicator: '.sold-out',
 	blockDetectionSignal: '.block',
 	threeDSecureIframe: 'iframe',
-	productPage: { sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '' },
+	productPage: { sizeGrid: '', sizeButton: '', addToCartButton: '', soldOutIndicator: '', blockIndicator: '' },
 	cart: { checkoutButton: '', cartCount: '' },
 	checkout: {
 		shippingContinueButton: '',
