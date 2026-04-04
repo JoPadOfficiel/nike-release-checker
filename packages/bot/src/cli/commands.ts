@@ -18,26 +18,22 @@ program
 	.requiredOption('--file <path>', 'Path to the accounts JSON file')
 	.action(async (opts: { file: string }) => {
 		const { importAccounts, formatImportSummary } = await import('../auth/accountManager.ts')
-		const { loadAccountsFile } = await import('../config/accountConfig.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		try {
-			// Pre-load valid accounts list for display (before import overwrites)
-			const { valid } = await loadAccountsFile(opts.file)
 			const result = await importAccounts(opts.file)
 
-			const lines = formatImportSummary(
-				result,
-				valid.map((a) => ({ id: a.id, email: a.email, proxy: a.proxy })),
-			)
+			const lines = formatImportSummary(result, result.processedAccounts)
 			for (const line of lines) console.log(line)
 
-			if (result.errors.length > 0) {
-				console.log('\nErrors:')
-				for (const err of result.errors) {
-					console.log(`  ${err.accountId !== 'unknown' ? err.accountId : '?'}: ${err.reason}`)
+			const nonAccountErrors = result.errors.filter((e) => e.accountId.startsWith('index:'))
+			if (nonAccountErrors.length > 0) {
+				console.log('\nValidation errors:')
+				for (const err of nonAccountErrors) {
+					console.log(`  ${err.accountId}: ${err.reason}`)
 				}
 			}
 		} catch (err) {
-			console.error(`❌ Import failed: ${String(err)}`)
+			console.error(`❌ Import failed: ${maskCredentials(String(err))}`)
 			process.exit(1)
 		}
 	})
