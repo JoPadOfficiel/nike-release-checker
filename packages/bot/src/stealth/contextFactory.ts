@@ -2,6 +2,7 @@ import { chromium } from 'playwright-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import type { BrowserContext, BrowserContextOptions } from 'playwright'
 import { maskProxy } from '../logger/credentialMasker.ts'
+import { parseProxyUrl } from './proxyValidator.ts'
 
 // Register the stealth plugin once at module level — never inside a function.
 // Registering it multiple times causes duplicate plugin warnings and unpredictable behavior.
@@ -83,12 +84,7 @@ export async function createStealthContext(
 	// Context-level proxy means each context can have a different proxy — critical for
 	// per-account isolation in parallel checkout runs.
 	if (proxy) {
-		const url = new URL(proxy)
-		contextOptions.proxy = {
-			server: `${url.protocol}//${url.hostname}:${url.port}`,
-			username: url.username || undefined,
-			password: url.password || undefined,
-		}
+		contextOptions.proxy = parseProxyUrl(proxy)
 	}
 
 	let context: BrowserContext
