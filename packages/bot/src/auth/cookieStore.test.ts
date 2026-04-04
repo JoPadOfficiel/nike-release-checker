@@ -155,6 +155,26 @@ describe('loadCookies', () => {
 			},
 		)
 	})
+
+	it('throws on empty string accountId', async () => {
+		await assert.rejects(
+			() => loadCookies('', TEST_LOAD_DIR),
+			(err: Error) => {
+				assert.ok(err.message.includes('Invalid account ID'))
+				return true
+			},
+		)
+	})
+
+	it('throws on dot-only accountId', async () => {
+		await assert.rejects(
+			() => loadCookies('..', TEST_LOAD_DIR),
+			(err: Error) => {
+				assert.ok(err.message.includes('Invalid account ID'))
+				return true
+			},
+		)
+	})
 })
 
 describe('injectCookies', () => {

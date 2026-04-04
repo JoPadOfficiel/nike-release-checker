@@ -1,5 +1,5 @@
 import { writeFile, mkdir, readFile } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import type { BrowserContext } from 'playwright'
 import type { CookieData } from './auth.types.ts'
 
@@ -14,37 +14,48 @@ export async function captureCookies(context: BrowserContext): Promise<CookieDat
 	) as CookieData[]
 }
 
+function sanitizeAccountId(accountId: string): string {
+	const safeId = basename(accountId)
+	if (!safeId || /^\.+$/.test(safeId)) {
+		throw new Error(`Invalid account ID: '${accountId}'`)
+	}
+	return safeId
+}
+
 export async function persistCookies(
 	accountId: string,
 	cookies: CookieData[],
 	sessionsDir = DEFAULT_SESSIONS_DIR,
 ): Promise<void> {
-	// basename() strips any path separators from accountId, preventing path traversal
-	const safeId = basename(accountId)
+	const safeId = sanitizeAccountId(accountId)
 	await mkdir(sessionsDir, { recursive: true })
-	const filePath = `${sessionsDir}/${safeId}.json`
+	const filePath = join(sessionsDir, `${safeId}.json`)
 	await writeFile(filePath, JSON.stringify(cookies, null, 2), { encoding: 'utf8', mode: 0o600 })
 }
 
 function isValidCookieArray(parsed: unknown): parsed is CookieData[] {
 	if (!Array.isArray(parsed)) return false
-	return parsed.every(
-		(c) =>
-			c !== null &&
-			typeof c === 'object' &&
-			typeof (c as Record<string, unknown>).name === 'string' &&
-			typeof (c as Record<string, unknown>).value === 'string' &&
-			typeof (c as Record<string, unknown>).domain === 'string' &&
-			typeof (c as Record<string, unknown>).path === 'string',
-	)
+	return parsed.every((c) => {
+		if (c === null || typeof c !== 'object') return false
+		const o = c as Record<string, unknown>
+		return (
+			typeof o.name === 'string' &&
+			typeof o.value === 'string' &&
+			typeof o.domain === 'string' &&
+			typeof o.path === 'string' &&
+			typeof o.expires === 'number' &&
+			typeof o.httpOnly === 'boolean' &&
+			typeof o.secure === 'boolean'
+		)
+	})
 }
 
 export async function loadCookies(
 	accountId: string,
 	sessionsDir = DEFAULT_SESSIONS_DIR,
 ): Promise<CookieData[]> {
-	const safeId = basename(accountId)
-	const filePath = `${sessionsDir}/${safeId}.json`
+	const safeId = sanitizeAccountId(accountId)
+	const filePath = join(sessionsDir, `${safeId}.json`)
 
 	let raw: string
 	try {
