@@ -11,3 +11,24 @@ yalc.lock
 
 #logs
 cli*.log
+
+#ai
+_bmad
+_bmad-output
+.agent
+.agents
+.agents/skills
+.claude
+.gemini
+.github
+.kiro
+.opencode
+.windsurf
+
+# Bot sensitive data
+packages/bot/.bot-data/
+bot.config.yaml
+accounts.json
+selectors.yaml
+bot.pid
+packages/bot/logs/
