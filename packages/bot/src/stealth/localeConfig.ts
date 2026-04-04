@@ -18,17 +18,24 @@ const MARKET_LOCALES: Record<string, LocaleConfig> = {
 }
 
 /**
- * Builds a LocaleConfig for the given market and language combination.
+ * Builds a LocaleConfig for the given market.
  *
  * @param market - ISO 3166-1 alpha-2 market code (e.g. 'FR')
+ * @param _language - Reserved for Phase 3 multi-language markets (e.g. 'CH' → 'fr' or 'de')
  * @throws if the market is not supported
  */
-export function buildLocaleConfig(market: string): LocaleConfig {
-	const config = MARKET_LOCALES[market.toUpperCase()]
+export function buildLocaleConfig(market: string, _language?: string): LocaleConfig {
+	const key = market.toUpperCase()
+	const config = Object.hasOwn(MARKET_LOCALES, key) ? MARKET_LOCALES[key] : undefined
 	if (!config) {
 		throw new Error(
 			`Unsupported market: '${market}'. Supported markets: ${Object.keys(MARKET_LOCALES).join(', ')}`,
 		)
 	}
-	return config
+	// Return a shallow clone to prevent callers from mutating the shared singleton
+	return {
+		...config,
+		geolocation: { ...config.geolocation },
+		extraHTTPHeaders: { ...config.extraHTTPHeaders },
+	}
 }
