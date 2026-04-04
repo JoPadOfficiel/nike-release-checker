@@ -1,6 +1,7 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
+import { checkSoldOut } from '../detectors/soldOutDetector.ts'
 
 export async function addToCart(
   page: Page,
@@ -10,11 +11,13 @@ export async function addToCart(
   return executeStep(
     'add-to-cart',
     async () => {
-      // Check if sold out before clicking ATC
-      const soldOutLocator = page.locator(selectors.productPage.soldOutIndicator)
-      const isSoldOut = await soldOutLocator.isVisible()
-      if (isSoldOut) {
-        throw Object.assign(new Error('Product is sold out'), { code: 'SOLD_OUT' })
+      // Check if sold out using all three signals
+      const soldOutResult = await checkSoldOut(page, selectors)
+      if (soldOutResult.soldOut) {
+        throw Object.assign(
+          new Error(`Product is sold out (signal: ${soldOutResult.signal})`),
+          { code: 'SOLD_OUT' },
+        )
       }
 
       const atcButton = page.locator(selectors.productPage.addToCartButton)
