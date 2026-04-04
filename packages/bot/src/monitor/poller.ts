@@ -35,10 +35,15 @@ export function extractAvailableSizes(formatted: FormattedRelease[]): string[] {
 
 /**
  * Fetch the current product status for a given slug.
- * Fetches the full Nike FR feed and filters to the requested slug.
+ * Uses countryCode and language from the bot config (defaults to FR/fr).
  */
-export async function fetchProductStatus(slug: string): Promise<ProductStatus> {
-  const feed = await getProductFeed({ countryCode: 'FR', language: 'fr' })
+export async function fetchProductStatus(
+  slug: string,
+  config?: BotConfig,
+): Promise<ProductStatus> {
+  const countryCode = (config?.checkout?.market ?? 'FR') as Parameters<typeof getProductFeed>[0]['countryCode']
+  const language = (config?.checkout?.language ?? 'fr') as Parameters<typeof getProductFeed>[0]['language']
+  const feed = await getProductFeed({ countryCode, language })
   const formatted = formatProductFeedResponse(feed)
   // Filter to the specific slug
   const releaseForSlug = formatted.filter((r) => r.slug === slug)
@@ -65,7 +70,7 @@ export async function startPolling(
 
   while (!signal.aborted) {
     try {
-      const status = await fetchProductStatus(slug)
+      const status = await fetchProductStatus(slug, config)
       await onPoll(status)
     } catch (err) {
       // Report error but continue polling

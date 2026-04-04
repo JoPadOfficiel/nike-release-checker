@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs'
 import { isDaemonRunning } from './daemonize.ts'
 import { validateAllSessions, type SessionValidationResult } from '../auth/preCheckoutValidation.ts'
 
@@ -10,12 +11,13 @@ export interface BotStatus {
   logFile: string
 }
 
-const START_TIME = Date.now()
+const PID_FILE = './bot.pid'
 
 /**
  * Format milliseconds to human-readable uptime string.
  */
 export function formatUptime(ms: number): string {
+  if (ms < 0) return '0s'
   const totalSeconds = Math.floor(ms / 1000)
   const days = Math.floor(totalSeconds / 86400)
   const hours = Math.floor((totalSeconds % 86400) / 3600)
@@ -30,16 +32,28 @@ export function formatUptime(ms: number): string {
 
 /**
  * Get the current bot status including daemon state and account sessions.
+ * Uptime is derived from the PID file mtime, which works correctly even
+ * when the status command is run from a separate process.
  */
 export async function getBotStatus(logFilePath = 'logs/bot.log'): Promise<BotStatus> {
   const daemonStatus = isDaemonRunning()
+
+  let uptimeMs: number | undefined
+  if (daemonStatus.running) {
+    try {
+      const pidStat = statSync(PID_FILE)
+      uptimeMs = Date.now() - pidStat.mtimeMs
+    } catch {
+      uptimeMs = undefined
+    }
+  }
 
   const accounts = await validateAllSessions()
 
   return {
     running: daemonStatus.running,
     pid: daemonStatus.pid,
-    uptimeMs: daemonStatus.running ? Date.now() - START_TIME : undefined,
+    uptimeMs,
     accounts,
     logFile: logFilePath,
   }
