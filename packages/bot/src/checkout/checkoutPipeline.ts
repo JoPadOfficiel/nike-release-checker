@@ -6,6 +6,7 @@ import { loadAndInjectCookies } from '../auth/cookieStore.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
 import { logStep } from '../logger/logger.ts'
 import { printStepResult } from '../logger/terminal.ts'
+import { registerContext, unregisterContext } from '../daemon/gracefulShutdown.ts'
 import type { StepResult, StepOutcome } from './executeStep.ts'
 import { classifyOutcome, type FinalOutcome } from './outcomeClassifier.ts'
 import { selectSize } from './steps/selectSize.ts'
@@ -44,6 +45,7 @@ export async function runCheckoutPipeline(
   console.log(`[checkout] Starting pipeline for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
   const context = await createStealthContext({ proxy: account.proxy })
+  registerContext(context)
 
   try {
     // Load and inject session cookies — throw if session file missing
@@ -147,6 +149,7 @@ export async function runCheckoutPipeline(
     }
   } finally {
     await context.close().catch(() => undefined)
+    unregisterContext(context)
   }
 }
 
