@@ -206,7 +206,7 @@ program
 			writePidFile()
 			setupGracefulShutdown(controller)
 
-			const targetSizes = opts.sizes.split(',').map((s) => s.trim())
+			const targetSizes = opts.sizes.split(',').map((s) => s.trim()).filter(Boolean)
 
 			await startMonitorAndCheckout(
 				{
@@ -336,14 +336,34 @@ program
 program
 	.command('status')
 	.description('Show daemon status and account session health')
-	.option('--json', 'Output status as structured JSON')
-	.action(async () => {
+	.option('--json', 'Output status as structured JSON', false)
+	.action(async (opts: { json?: boolean }) => {
 		const { getBotStatus, printBotStatus } = await import('../daemon/botStatus.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		try {
 			const status = await getBotStatus()
-			printBotStatus(status)
+			if (opts.json) {
+				const validCount = status.accounts.filter((a) => a.valid).length
+				const expiredCount = status.accounts.filter((a) => a.reason === 'expired').length
+				const missingCount = status.accounts.filter((a) => a.reason === 'no_session').length
+				console.log(JSON.stringify({
+					bot: {
+						running: status.running,
+						pid: status.pid ?? null,
+						uptimeMs: status.uptimeMs ?? null,
+					},
+					sessions: {
+						valid: validCount,
+						expired: expiredCount,
+						missing: missingCount,
+						total: status.accounts.length,
+					},
+				}))
+			} else {
+				printBotStatus(status)
+			}
 		} catch (err) {
-			console.error(`❌ Status failed: ${err}`)
+			console.error(`❌ Status failed: ${maskCredentials(String(err))}`)
 			process.exit(1)
 		}
 	})

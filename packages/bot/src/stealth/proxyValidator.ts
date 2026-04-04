@@ -86,15 +86,15 @@ export function parseProxyUrl(proxyUrl: string): {
 	try {
 		url = new URL(proxyUrl)
 	} catch {
-		throw new Error(`parseProxyUrl: invalid proxy URL: ${proxyUrl}`)
+		throw new Error(`parseProxyUrl: invalid proxy URL: ${maskProxy(proxyUrl)}`)
 	}
 	if (!ALLOWED_PROXY_SCHEMES.includes(url.protocol)) {
 		throw new Error(
-			`parseProxyUrl: unsupported scheme '${url.protocol}' in '${proxyUrl}'. Allowed: ${ALLOWED_PROXY_SCHEMES.join(', ')}`,
+			`parseProxyUrl: unsupported scheme '${url.protocol}' in '${maskProxy(proxyUrl)}'. Allowed: ${ALLOWED_PROXY_SCHEMES.join(', ')}`,
 		)
 	}
 	if (!url.hostname) {
-		throw new Error(`parseProxyUrl: missing hostname in proxy URL: ${proxyUrl}`)
+		throw new Error(`parseProxyUrl: missing hostname in proxy URL: ${maskProxy(proxyUrl)}`)
 	}
 	// Use explicit port if provided; fall back to scheme defaults to avoid trailing colon
 	const port =
@@ -102,7 +102,7 @@ export function parseProxyUrl(proxyUrl: string): {
 		(url.protocol === 'https:' ? '443' : url.protocol === 'http:' ? '80' : null)
 	if (!port) {
 		throw new Error(
-			`parseProxyUrl: missing port in proxy URL (required for ${url.protocol}): ${proxyUrl}`,
+			`parseProxyUrl: missing port in proxy URL (required for ${url.protocol}): ${maskProxy(proxyUrl)}`,
 		)
 	}
 	return {

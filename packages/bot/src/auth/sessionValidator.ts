@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import type { CookieData, SessionStatus, SessionValidationResult } from './auth.types.ts'
 
 export type { SessionStatus, SessionValidationResult }
@@ -16,7 +16,7 @@ export async function validateSession(
 	sessionsDir = SESSIONS_DIR,
 ): Promise<SessionValidationResult> {
 	const safeId = basename(accountId)
-	const filePath = `${sessionsDir}/${safeId}.json`
+	const filePath = join(sessionsDir, `${safeId}.json`)
 
 	let fileStat: Awaited<ReturnType<typeof stat>>
 	try {

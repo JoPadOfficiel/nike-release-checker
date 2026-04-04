@@ -1,6 +1,6 @@
 import { writeFile, mkdir, readFile, access, readdir, unlink } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { basename as pathBasename } from 'node:path'
+import { basename as pathBasename, join } from 'node:path'
 import { loadAccountsFile } from '../config/accountConfig.ts'
 import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail, maskProxy, maskCredentials } from '../logger/credentialMasker.ts'
@@ -253,14 +253,14 @@ export async function clearAllSessions(): Promise<{ count: number }> {
 		return { count: 0 }
 	}
 	const jsonFiles = files.filter((f) => f.endsWith('.json'))
-	const results = await Promise.allSettled(jsonFiles.map((f) => unlink(`${SESSIONS_DIR}/${f}`)))
+	const results = await Promise.allSettled(jsonFiles.map((f) => unlink(join(SESSIONS_DIR, f))))
 	const count = results.filter((r) => r.status === 'fulfilled').length
 	return { count }
 }
 
 export async function clearSession(accountId: string): Promise<void> {
 	const safeId = pathBasename(accountId)
-	const filePath = `${SESSIONS_DIR}/${safeId}.json`
+	const filePath = join(SESSIONS_DIR, `${safeId}.json`)
 	try {
 		await unlink(filePath)
 	} catch (err) {
