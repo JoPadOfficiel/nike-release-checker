@@ -94,9 +94,64 @@ program
 	.command('accounts')
 	.description('List all accounts with their session status')
 	.option('--verbose', 'Show additional details')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.action(async (opts: { verbose?: boolean }) => {
+		const { listAccounts } = await import('../auth/accountManager.ts')
+		const { maskEmail, maskProxy } = await import('../logger/credentialMasker.ts')
+
+		const rows = await listAccounts(opts.verbose ?? false)
+
+		if (rows.length === 0) {
+			console.log("No accounts found. Run 'nike-bot import-accounts' first.")
+			return
+		}
+
+		const SESSION_LABEL: Record<string, string> = {
+			valid: 'valid',
+			expired: 'expired',
+			missing: 'missing',
+		}
+
+		// Build display rows with masked values
+		const displayRows = rows.map((r) => ({
+			id: r.id,
+			email: maskEmail(r.email),
+			country: r.country,
+			proxy: r.proxy ? maskProxy(r.proxy) : '(none)',
+			session: SESSION_LABEL[r.session.status] ?? r.session.status,
+			...(opts.verbose
+				? {
+						sizes: r.preferredSizes?.join(', ') ?? '',
+						lastLogin: r.session.lastLogin?.toISOString().slice(0, 19).replace('T', ' ') ?? '—',
+						domains: String(r.session.domainCount ?? '—'),
+					}
+				: {}),
+		}))
+
+		// Column headers
+		const baseHeaders = ['ID', 'Email', 'Country', 'Proxy', 'Session']
+		const verboseHeaders = opts.verbose ? ['Sizes', 'Last Login', 'Domains'] : []
+		const headers = [...baseHeaders, ...verboseHeaders]
+		const keys = opts.verbose
+			? (['id', 'email', 'country', 'proxy', 'session', 'sizes', 'lastLogin', 'domains'] as const)
+			: (['id', 'email', 'country', 'proxy', 'session'] as const)
+
+		// Compute column widths
+		const widths = headers.map((h, i) => {
+			const key = keys[i]!
+			const maxVal = Math.max(...displayRows.map((r) => String((r as Record<string, string>)[key] ?? '').length))
+			return Math.max(h.length, maxVal)
+		})
+
+		const pad = (s: string, w: number): string => s.padEnd(w)
+		const line = (cols: string[]): string => cols.map((c, i) => pad(c, widths[i]!)).join('  ')
+
+		console.log(`\nNike Accounts — ${rows.length} account(s)\n`)
+		console.log(line(headers))
+		console.log(widths.map((w) => '-'.repeat(w)).join('  '))
+		for (const r of displayRows) {
+			console.log(line(keys.map((k) => String((r as Record<string, string>)[k] ?? ''))))
+		}
+		console.log()
 	})
 
 program

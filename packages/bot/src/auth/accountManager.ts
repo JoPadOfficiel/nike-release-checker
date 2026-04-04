@@ -7,9 +7,10 @@ import { testProxyConnectivity } from './proxyTester.ts'
 import { createStealthContext } from '../stealth/contextFactory.ts'
 import { performNikeLogin } from './loginFlow.ts'
 import { captureCookies, persistCookies } from './cookieStore.ts'
+import { validateSession } from './sessionValidator.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import type { Selectors } from '../config/selectorSchema.ts'
-import type { ImportResult, AuthResult } from './auth.types.ts'
+import type { ImportResult, AuthResult, AccountStatusRow } from './auth.types.ts'
 
 const DATA_DIR = '.bot-data'
 const ACCOUNTS_FILE = `${DATA_DIR}/accounts.json`
@@ -226,4 +227,24 @@ export function formatImportSummary(
 	const total = result.imported + result.failed
 	lines.push(`\n${result.imported}/${total} accounts imported. ${result.failed} failed.`)
 	return lines
+}
+
+export async function listAccounts(verbose: boolean): Promise<AccountStatusRow[]> {
+	const accounts = await loadStoredAccounts()
+	const rows: AccountStatusRow[] = []
+	for (const account of accounts) {
+		const session = await validateSession(account.id)
+		const row: AccountStatusRow = {
+			id: account.id,
+			email: account.email,
+			country: account.country,
+			proxy: account.proxy,
+			session,
+		}
+		if (verbose) {
+			row.preferredSizes = account.preferredSizes
+		}
+		rows.push(row)
+	}
+	return rows
 }
