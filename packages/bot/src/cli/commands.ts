@@ -91,7 +91,7 @@ program
 		try {
 			if (opts.account) {
 				await clearSession(opts.account)
-				console.log(`Session cleared for ${opts.account}.`)
+				console.log(`Session cleared for ${maskCredentials(opts.account)}.`)
 			} else {
 				const { count } = await clearAllSessions()
 				if (count === 0) {

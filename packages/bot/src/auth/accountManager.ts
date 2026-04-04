@@ -253,17 +253,19 @@ export async function clearAllSessions(): Promise<{ count: number }> {
 		return { count: 0 }
 	}
 	const jsonFiles = files.filter((f) => f.endsWith('.json'))
-	await Promise.all(jsonFiles.map((f) => unlink(`${SESSIONS_DIR}/${f}`)))
-	return { count: jsonFiles.length }
+	const results = await Promise.allSettled(jsonFiles.map((f) => unlink(`${SESSIONS_DIR}/${f}`)))
+	const count = results.filter((r) => r.status === 'fulfilled').length
+	return { count }
 }
 
 export async function clearSession(accountId: string): Promise<void> {
 	const safeId = pathBasename(accountId)
 	const filePath = `${SESSIONS_DIR}/${safeId}.json`
 	try {
-		await access(filePath, constants.F_OK)
-	} catch {
-		throw new Error(`No session found for account '${accountId}'`)
+		await unlink(filePath)
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code
+		if (code === 'ENOENT') throw new Error(`No session found for account '${accountId}'`)
+		throw err
 	}
-	await unlink(filePath)
 }
