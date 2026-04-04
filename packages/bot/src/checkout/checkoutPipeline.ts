@@ -5,6 +5,7 @@ import { createStealthContext } from '../stealth/contextFactory.ts'
 import { loadAndInjectCookies } from '../auth/cookieStore.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
 import { logStep } from '../logger/logger.ts'
+import { printStepResult } from '../logger/terminal.ts'
 import type { StepResult, StepOutcome } from './executeStep.ts'
 import { selectSize } from './steps/selectSize.ts'
 import { addToCart } from './steps/addToCart.ts'
@@ -67,6 +68,7 @@ export async function runCheckoutPipeline(
     const sizeResult = await selectSize(page, productUrl, targetSizes, selectors, stepTimeoutMs)
     steps.push(sizeResult)
     logStep(account.email, sizeResult)
+    printStepResult(sizeResult)
     if (sizeResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, sizeResult.outcome, pipelineStart)
     }
@@ -75,6 +77,7 @@ export async function runCheckoutPipeline(
     const cartResult = await addToCart(page, selectors, stepTimeoutMs)
     steps.push(cartResult)
     logStep(account.email, cartResult)
+    printStepResult(cartResult)
     if (cartResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, cartResult.outcome, pipelineStart)
     }
@@ -83,6 +86,7 @@ export async function runCheckoutPipeline(
     const navResult = await navigateCheckout(page, selectors, stepTimeoutMs)
     steps.push(navResult)
     logStep(account.email, navResult)
+    printStepResult(navResult)
     if (navResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, navResult.outcome, pipelineStart)
     }
@@ -91,6 +95,7 @@ export async function runCheckoutPipeline(
     const shippingResult = await completeShipping(page, selectors, stepTimeoutMs)
     steps.push(shippingResult)
     logStep(account.email, shippingResult)
+    printStepResult(shippingResult)
     if (shippingResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, shippingResult.outcome, pipelineStart)
     }
@@ -99,6 +104,7 @@ export async function runCheckoutPipeline(
     const paymentResult = await completePayment(page, selectors, stepTimeoutMs)
     steps.push(paymentResult)
     logStep(account.email, paymentResult)
+    printStepResult(paymentResult)
     if (paymentResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, paymentResult.outcome, pipelineStart)
     }
@@ -107,6 +113,7 @@ export async function runCheckoutPipeline(
     const submitResult = await submitOrder(page, selectors, dryRun, stepTimeoutMs)
     steps.push(submitResult)
     logStep(account.email, submitResult)
+    printStepResult(submitResult)
     if (submitResult.outcome !== 'success') {
       return buildResult(account.id, maskedEmail, steps, submitResult.outcome, pipelineStart)
     }
