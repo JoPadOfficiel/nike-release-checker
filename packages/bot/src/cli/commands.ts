@@ -325,10 +325,31 @@ program
 	})
 
 program
+	.command('stop')
+	.description('Stop the running daemon')
+	.action(async () => {
+		const { isDaemonRunning, removePidFile } = await import('../daemon/daemonize.ts')
+		const { running, pid } = isDaemonRunning()
+		if (!running) {
+			console.log('No daemon is currently running.')
+			return
+		}
+		process.kill(pid!, 'SIGTERM')
+		removePidFile()
+		console.log(`Daemon stopped (PID: ${pid})`)
+	})
+
+program
 	.command('status')
 	.description('Show daemon status and account session health')
 	.option('--json', 'Output status as structured JSON')
-	.action(() => {
-		console.log('Not yet implemented')
-		process.exit(0)
+	.action(async () => {
+		const { getBotStatus, printBotStatus } = await import('../daemon/botStatus.ts')
+		try {
+			const status = await getBotStatus()
+			printBotStatus(status)
+		} catch (err) {
+			console.error(`❌ Status failed: ${err}`)
+			process.exit(1)
+		}
 	})
