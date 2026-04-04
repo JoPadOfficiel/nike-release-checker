@@ -2,6 +2,7 @@ import { loadStoredAccounts } from '../auth/accountManager.ts'
 import { loadBotConfig } from '../config/botConfig.ts'
 import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
+import { printCheckoutSummary } from '../logger/terminal.ts'
 import { runCheckoutPipeline, type CheckoutPipelineResult } from './checkoutPipeline.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 
@@ -116,11 +117,15 @@ export async function runParallelCheckout(
     durationMs,
   }
 
-  if (dryRun) {
-    console.log(`\n⚠️ DRY-RUN MODE — Summary: ${complete} would complete, ${failed} failed, ${noSession} no session (${durationMs}ms)`)
-  } else {
-    console.log(`\nSummary: ${complete}/${accounts.length} complete, ${failed} failed, ${noSession} no session (${durationMs}ms)`)
-  }
+  printCheckoutSummary(
+    results.map((r) => ({
+      accountEmail: r.accountEmail,
+      finalOutcome: r.finalOutcome,
+      steps: r.steps,
+      durationMs: r.durationMs,
+    })),
+    dryRun,
+  )
 
   return summary
 }
