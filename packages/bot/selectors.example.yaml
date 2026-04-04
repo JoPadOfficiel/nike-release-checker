@@ -1,0 +1,29 @@
+# Nike France CSS selectors
+# Copy to selectors.yaml and update when Nike changes their DOM
+#
+# These selectors target the Nike FR store (nike.com/fr/)
+# Verify with dry-run before live drops: nike-bot dry-run --slug <slug> --profile <id>
+
+# Product page - size grid
+sizeAvailable: '[data-qa="size-available"]'
+sizeSelected: '[data-qa="size-available"][aria-checked="true"]'
+purchaseButton: '.ncss-btn-primary-dark.btn-lg'
+
+# Cart / checkout navigation
+checkoutLink: 'a[href="/fr/checkout"]'
+
+# Checkout - shipping step
+shippingSaveButton: '[data-attr="saveAddressBtn"]'
+
+# Checkout - payment step
+paymentContinueButton: '[data-attr="continuePaymentBtn"]'
+
+# Checkout - order review step
+orderSubmitButton: '[data-attr="placeOrderBtn"]'
+
+# Error detection
+soldOutIndicator: '[data-qa="not-available-message"]'
+blockDetectionSignal: '#challenge-running, .block-page, #sec-cpt-if'
+
+# 3D Secure detection
+threeDSecureIframe: 'iframe[src*="acs"], iframe[src*="3ds"], iframe[name*="threeDSIframe"]'
