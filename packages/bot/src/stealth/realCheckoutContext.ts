@@ -1,0 +1,93 @@
+import { launchRealChrome, type RealChromeHandle } from './realChrome.ts'
+import { loadSessionSnapshot, injectSessionSnapshot, completeOAuthHandshake } from '../auth/captureSession.ts'
+
+export interface RealCheckoutContextOptions {
+  accountId: string
+  headless?: boolean  // Default: true (headless during automated runs)
+  port?: number  // Default: random in 9300-9400 range for parallel runs
+  locale?: string
+  timezone?: string
+}
+
+/**
+ * Launch a real Chrome (via CDP) for a specific account and prepare it for checkout.
+ *
+ * Key differences from createCheckoutContext:
+ *   - Uses real Chrome spawned as an independent process (bypasses Kasada's Playwright detection)
+ *   - Per-account persistent profile directory — auth state persists across runs
+ *   - Automatically completes OAuth handshake if session snapshot exists
+ *
+ * WORKFLOW:
+ *   const handle = await createRealCheckoutContext({ accountId: 'user@email.com' })
+ *   try {
+ *     const page = handle.context.pages()[0] ?? await handle.context.newPage()
+ *     // run checkout steps on page
+ *   } finally {
+ *     await handle.close()  // ALWAYS in finally
+ *   }
+ *
+ * PARALLEL EXECUTION:
+ *   Each account gets its own Chrome process with its own userDataDir and debug port.
+ *   Pass different `port` values per account to run in parallel.
+ */
+export async function createRealCheckoutContext(
+  options: RealCheckoutContextOptions,
+): Promise<RealChromeHandle> {
+  const {
+    accountId,
+    headless = true,
+    port = 9300 + Math.floor(Math.random() * 100),
+    locale,
+    timezone,
+  } = options
+
+  const handle = await launchRealChrome({
+    accountId,
+    headless,
+    port,
+    ...(locale ? { locale } : {}),
+    ...(timezone ? { timezone } : {}),
+  })
+
+  try {
+    // Load and inject session snapshot. If no snapshot exists AND the profile
+    // doesn't have auth cookies from a previous run, fail fast with a clear error.
+    let injectedSnapshot = false
+    try {
+      const snapshot = await loadSessionSnapshot(accountId)
+      await injectSessionSnapshot(handle.context, snapshot)
+      injectedSnapshot = true
+    } catch (err) {
+      // No snapshot available — check if profile has a sid cookie from prior run.
+      const existingCookies = await handle.context.cookies()
+      const hasSid = existingCookies.some((c) => c.name === 'sid')
+      if (!hasSid) {
+        // Re-throw so the caller can return no_session
+        throw err instanceof Error ? err : new Error(`Session snapshot missing for account '${accountId}'`)
+      }
+    }
+
+    // Complete OAuth handshake to make www.nike.com set its access_token.
+    // Only needed if we JUST injected a snapshot, or if the profile has never
+    // completed the handshake before.
+    if (injectedSnapshot) {
+      const page = handle.context.pages()[0] ?? (await handle.context.newPage())
+      const authOk = await completeOAuthHandshake(page)
+      console.log(`  [auth] handshake returned: ${authOk}, page URL: ${page.url()}`)
+      const verify = await page.evaluate(() => ({
+        oidc: Object.keys(localStorage).filter((k) => k.startsWith('oidc.')).length,
+        origin: window.location.origin,
+      }))
+      console.log(`  [auth] localStorage check: origin=${verify.origin}, oidc=${verify.oidc}`)
+      if (!authOk) {
+        console.warn(`  [auth] OAuth handshake failed for ${accountId} — session may be expired. Re-run capture-session.`)
+      }
+    }
+
+    return handle
+  } catch (err) {
+    // Clean up on failure
+    try { await handle.close() } catch {}
+    throw err
+  }
+}

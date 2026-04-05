@@ -28,6 +28,12 @@ _bmad-output
 # Bot sensitive data
 packages/bot/.bot-data/
 bot.config.yaml
+packages/bot/selectors.yaml
+
+# Bot debug/live-test scripts + runtime artifacts
+packages/bot/scripts/.bot-data/
+.playwright-mcp/
+.rtk/
 accounts.json
 selectors.yaml
 bot.pid
