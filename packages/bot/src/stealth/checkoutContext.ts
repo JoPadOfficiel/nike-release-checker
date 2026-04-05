@@ -1,5 +1,6 @@
 import { createStealthContext, type StealthContextOptions } from './contextFactory.ts'
 import { loadAndInjectCookies } from '../auth/cookieStore.ts'
+import { loadSessionSnapshot, injectSessionSnapshot, completeOAuthHandshake } from '../auth/captureSession.ts'
 import type { BrowserContext } from 'playwright'
 
 export interface CheckoutContextOptions extends StealthContextOptions {
@@ -51,10 +52,37 @@ export async function createCheckoutContext(
 	const { accountId, ...stealthOptions } = options
 	const context = await createStealthContext(stealthOptions)
 	try {
-		await loadAndInjectCookies(context, accountId)
+		// Prefer full session snapshot (cookies + localStorage + sessionStorage).
+		// Nike uses OIDC which stores access_token in localStorage — cookies alone
+		// are not enough to authenticate against www.nike.com.
+		// Falls back to cookies-only if no snapshot exists (backwards compatible).
+		let useSnapshot = false
+		try {
+			const snapshot = await loadSessionSnapshot(accountId)
+			await injectSessionSnapshot(context, snapshot)
+			useSnapshot = true
+		} catch {
+			// No snapshot available — try cookies-only (legacy format)
+			await loadAndInjectCookies(context, accountId)
+		}
+
+		// When using a snapshot, trigger the OAuth handshake so www.nike.com
+		// sets its access_token. Without this, cookies are injected but the
+		// user appears as "guest" on www.nike.com until visiting /fr/member.
+		if (useSnapshot) {
+			const page = await context.newPage()
+			try {
+				const authOk = await completeOAuthHandshake(page)
+				if (!authOk) {
+					console.warn(`  [auth] OAuth handshake failed for ${accountId} — session may be expired`)
+				}
+			} finally {
+				await page.close()
+			}
+		}
 		return context
 	} catch (err) {
-		// If cookie injection fails for any reason, close the context immediately.
+		// If injection fails for any reason, close the context immediately.
 		// We do NOT want to leave orphaned browser contexts.
 		// Suppress close() errors so the original error is always re-thrown.
 		try { await context.close() } catch {}

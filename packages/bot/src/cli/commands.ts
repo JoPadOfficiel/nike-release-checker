@@ -107,6 +107,80 @@ program
 	})
 
 program
+	.command('capture-session')
+	.description('Open a browser so you can log in manually, then save the full session (cookies + localStorage)')
+	.requiredOption('--account <id>', 'Account ID to store the session under (e.g. "myemail@example.com")')
+	.option('--headless', 'Run without visible browser (cookies from stdin pipe required)', false)
+	.action(async (opts: { account: string; headless?: boolean }) => {
+		const { launchRealChrome } = await import('../stealth/realChrome.ts')
+		const { captureFullSession, persistSessionSnapshot, waitForNikeAuthCookie } = await import('../auth/captureSession.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+
+		if (opts.headless) {
+			console.error('❌ --headless mode requires piping session data — not yet supported. Run without --headless.')
+			process.exit(1)
+		}
+
+		console.log('Launching real Google Chrome (bypasses Playwright detection)...')
+		console.log('')
+		console.log('  1. Chrome opens with a persistent profile stored in ~/.nike-bot/chrome-profile')
+		console.log('  2. Navigate to https://www.nike.com/fr and log in with your account')
+		console.log('  3. The bot will automatically detect when the auth cookie is set')
+		console.log('  4. Do NOT close the Chrome window until capture completes')
+		console.log('')
+
+		const { context, close } = await launchRealChrome({ headless: false })
+
+		// Use the default page that Chrome opens on startup, or create one
+		const existingPages = context.pages()
+		const page = existingPages[0] ?? (await context.newPage())
+		await page.goto('https://www.nike.com/fr', { waitUntil: 'domcontentloaded' })
+
+		// Poll for the sid auth cookie — Nike's OAuth flow sets it AFTER login completes.
+		// This replaces manual "press ENTER" which was too easy to trigger prematurely.
+		console.log('Waiting for Nike auth cookie (sid)... (2 min timeout)')
+		const sidFound = await waitForNikeAuthCookie(context, 120_000, 1500)
+		if (!sidFound) {
+			console.error('')
+			console.error('❌ Timeout: sid cookie never appeared. Did you complete login?')
+			console.error('   If yes, Nike may have changed their OAuth flow. Try again.')
+			await close()
+			process.exit(1)
+		}
+		console.log('✓ sid cookie detected — waiting 5s for full OAuth callback to settle...')
+		await new Promise((r) => setTimeout(r, 5000))
+
+		console.log('Capturing session state...')
+		const snapshot = await captureFullSession(context, page)
+		const hasSid = snapshot.cookies.some((c) => c.name === 'sid')
+		const hasOidcLocalStorage = Object.values(snapshot.localStorage).some((ls) =>
+			Object.keys(ls).some((k) => k.startsWith('oidc.')),
+		)
+
+		console.log(`  Cookies captured: ${snapshot.cookies.length}`)
+		console.log(`  localStorage origins: ${Object.keys(snapshot.localStorage).length}`)
+		console.log(`  sessionStorage origins: ${Object.keys(snapshot.sessionStorage).length}`)
+		console.log(`  sid cookie: ${hasSid ? '✓' : '✗'}`)
+		console.log(`  OIDC localStorage entries: ${hasOidcLocalStorage ? '✓' : '✗'}`)
+
+		if (!hasSid || !hasOidcLocalStorage) {
+			console.log('')
+			console.log('⚠️  Warning: session may be incomplete. Make sure you were actually logged in before pressing ENTER.')
+		}
+
+		try {
+			await persistSessionSnapshot(opts.account, snapshot)
+			console.log('')
+			console.log(`✓ Session saved for '${maskCredentials(opts.account)}'`)
+		} catch (err) {
+			console.error(`❌ Failed to save session: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		} finally {
+			await close()
+		}
+	})
+
+program
 	.command('accounts')
 	.description('List all accounts with their session status')
 	.option('--verbose', 'Show additional details')
@@ -233,7 +307,8 @@ program
 	.requiredOption('--profile <account_id>', 'Account ID to use for the dry run')
 	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
 	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
-	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string }) => {
+	.option('--url <url>', 'Full product URL (overrides slug-based URL)')
+	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string; url?: string }) => {
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		const { loadStoredAccounts } = await import('../auth/accountManager.ts')
 		const { loadBotConfig } = await import('../config/botConfig.ts')
@@ -250,8 +325,8 @@ program
 			const config = await loadBotConfig(configPath)
 			const selectors = await loadSelectors(opts.selectors)
 			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : account.preferredSizes ?? []
-			const productUrl = `https://www.nike.com/fr/launch/t/${opts.slug}`
-			console.log(`[DRY-RUN] Starting dry-run for slug: ${opts.slug}`)
+			const productUrl = opts.url ?? `https://www.nike.com/fr/launch/t/${opts.slug}`
+			console.log(`[DRY-RUN] Starting dry-run for ${opts.url ? `URL: ${opts.url}` : `slug: ${opts.slug}`}`)
 			const result = await runCheckoutPipeline(account, config, selectors, {
 				productUrl,
 				targetSizes,

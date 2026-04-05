@@ -1,8 +1,7 @@
 import type { BotConfig } from '../config/botConfigSchema.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import type { Selectors } from '../config/selectorSchema.ts'
-import { createStealthContext } from '../stealth/contextFactory.ts'
-import { loadAndInjectCookies } from '../auth/cookieStore.ts'
+import { createRealCheckoutContext } from '../stealth/realCheckoutContext.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
 import { logStep } from '../logger/logger.ts'
 import { printStepResult } from '../logger/terminal.ts'
@@ -44,28 +43,36 @@ export async function runCheckoutPipeline(
 
   console.log(`[checkout] Starting pipeline for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
-  const context = await createStealthContext({ proxy: account.proxy })
+  // Use real Chrome via CDP — bypasses Kasada's Playwright-launch detection.
+  // This spawns Chrome as an independent process with a per-account persistent
+  // profile, injects session snapshot, and completes OAuth handshake.
+  let handle: Awaited<ReturnType<typeof createRealCheckoutContext>>
+  try {
+    handle = await createRealCheckoutContext({
+      accountId: account.id,
+      headless: false,  // Visible browser — Kasada blocks headless Chrome at accounts.nike.com
+    })
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Session snapshot missing')) {
+      console.log(`  No session for ${maskedEmail} — skipping. Run: nike-bot capture-session --account ${account.id}`)
+      return {
+        accountId: account.id,
+        accountEmail: maskedEmail,
+        steps: [],
+        finalOutcome: 'no_session',
+        durationMs: Math.round(performance.now() - pipelineStart),
+      }
+    }
+    throw err
+  }
+
+  const context = handle.context
   registerContext(context)
 
   try {
-    // Load and inject session cookies — throw if session file missing
-    try {
-      await loadAndInjectCookies(context, account.id)
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('Session file missing')) {
-        console.log(`  No session for ${maskedEmail} — skipping`)
-        return {
-          accountId: account.id,
-          accountEmail: maskedEmail,
-          steps: [],
-          finalOutcome: 'no_session',
-          durationMs: Math.round(performance.now() - pipelineStart),
-        }
-      }
-      throw err
-    }
-
-    const page = await context.newPage()
+    // Reuse existing page (Chrome opens with a default new-tab page) instead of creating a new one.
+    // After OAuth handshake, this page is at www.nike.com/member/profile.
+    const page = handle.context.pages()[0] ?? (await handle.context.newPage())
     const steps: StepResult[] = []
 
     // Step 1: Select size
@@ -148,8 +155,8 @@ export async function runCheckoutPipeline(
       durationMs: Math.round(performance.now() - pipelineStart),
     }
   } finally {
-    await context.close().catch(() => undefined)
     unregisterContext(context)
+    await handle.close().catch(() => undefined)
   }
 }
 
