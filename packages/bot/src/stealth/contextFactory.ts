@@ -60,24 +60,52 @@ export async function createStealthContext(
 		console.log(`  Proxy: ${maskProxy(proxy)}`)
 	}
 
+	// Use the REAL Google Chrome installed on the system instead of bundled Chromium.
+	// Kasada inspects sec-ch-ua brands: real Chrome sends "Google Chrome";v="X" alongside
+	// "Chromium";v="X" — plain Chromium only sends "Chromium" which is a bot signal.
+	// Falls back to bundled Chromium if Chrome isn't installed.
+	//
+	// When headless: use the new headless mode (`--headless=new`) which doesn't expose
+	// "HeadlessChrome" in the UA — it reports as regular "Chrome".
+	const sharedArgs = [
+		'--no-sandbox',
+		'--disable-setuid-sandbox',
+		'--disable-dev-shm-usage',
+		'--disable-accelerated-2d-canvas',
+		'--disable-gpu',
+		'--window-size=1920,1080',
+		// Removes the navigator.webdriver automation flag that Kasada/Akamai fingerprint.
+		'--disable-blink-features=AutomationControlled',
+	]
+	// New headless mode: appears as regular Chrome (no "HeadlessChrome" in UA)
+	const launchArgs = headless ? [...sharedArgs, '--headless=new'] : sharedArgs
+
 	const browser = await chromium.launch({
-		headless,
-		args: [
-			'--no-sandbox',
-			'--disable-setuid-sandbox',
-			'--disable-dev-shm-usage',
-			'--disable-accelerated-2d-canvas',
-			'--disable-gpu',
-			'--window-size=1920,1080',
-		],
+		channel: 'chrome',
+		headless: false, // We control headless via --headless=new flag above
+		args: launchArgs,
+	}).catch(async () => {
+		// Fallback to bundled Chromium if Chrome isn't installed
+		console.warn('  [stealth] Google Chrome not found — falling back to bundled Chromium (higher bot-detection risk)')
+		return chromium.launch({
+			headless,
+			args: sharedArgs,
+		})
 	})
+
+	// Build the UA based on the real Chrome we launched, but with HeadlessChrome → Chrome.
+	// We read Chrome's native UA (from the browser we just launched) and strip "Headless".
+	// Kasada detects "HeadlessChrome" in UA = instant block.
+	const probePage = await browser.newPage()
+	const nativeUA = await probePage.evaluate(() => navigator.userAgent)
+	await probePage.close()
+	const cleanedUA = nativeUA.replace('HeadlessChrome', 'Chrome')
 
 	const contextOptions: BrowserContextOptions = {
 		locale,
 		timezoneId: timezone,
 		viewport: { width: 1920, height: 1080 },
-		userAgent:
-			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+		userAgent: cleanedUA,
 		extraHTTPHeaders: {
 			'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
 			Accept:
@@ -111,6 +139,11 @@ export async function createStealthContext(
 		// This runs before every page navigation in the context.
 		// NOTE: must be a string, not a function — tsx/esbuild compiles arrow functions with
 		// `__name()` helper calls that are undefined in the browser, causing silent failures.
+		//
+		// Also injects CSS to force-hide Nike's cookie consent modal. Nike's modal intercepts
+		// clicks and its click-based dismissal is unreliable (Nike rejects automated clicks).
+		// Hiding via CSS is the most robust approach — the modal stays in the DOM but cannot
+		// block pointer events.
 		await context.addInitScript(`
 			Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 			Object.defineProperty(navigator, 'plugins', { get: () => [
@@ -119,6 +152,38 @@ export async function createStealthContext(
 				{ name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
 			] });
 			Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'fr', 'en-US', 'en'] });
+
+			// Remove Nike cookie consent modal via DOM observer — the click-based dismissal
+			// is unreliable (Nike's React state keeps the modal "open" even after hiding via CSS,
+			// which blocks event handlers on the rest of the page). Hard-removing the modal
+			// from the DOM frees up all interactions.
+			(function () {
+				function nukeCookieModal() {
+					var backdrop = document.querySelector('[data-testid="modal-backdrop"]');
+					if (backdrop && backdrop.parentElement) {
+						backdrop.parentElement.removeChild(backdrop);
+					}
+					var root = document.querySelector('[data-testid="cookie-modal-root"]');
+					if (root && root.parentElement) {
+						root.parentElement.removeChild(root);
+					}
+					var wrapper = document.querySelector('.modal-portal-content-wrapper');
+					if (wrapper && wrapper.parentElement && wrapper.querySelector('[data-testid="cookie-modal"]')) {
+						wrapper.parentElement.removeChild(wrapper);
+					}
+				}
+				// Run immediately + on any DOM mutation (React may re-inject the modal).
+				nukeCookieModal();
+				var obs = new MutationObserver(function () { nukeCookieModal(); });
+				if (document.body) {
+					obs.observe(document.body, { childList: true, subtree: true });
+				} else {
+					document.addEventListener('DOMContentLoaded', function () {
+						obs.observe(document.body, { childList: true, subtree: true });
+						nukeCookieModal();
+					});
+				}
+			})();
 		`)
 
 		return context
