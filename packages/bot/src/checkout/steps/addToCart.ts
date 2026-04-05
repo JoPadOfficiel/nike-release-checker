@@ -2,6 +2,7 @@ import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
 import { checkSoldOut } from '../detectors/soldOutDetector.ts'
+import { naturalClick } from '../naturalClick.ts'
 
 export async function addToCart(
   page: Page,
@@ -28,7 +29,7 @@ export async function addToCart(
         throw Object.assign(new Error('Add to cart button not available'), { code: 'SOLD_OUT' })
       }
 
-      await atcButton.click()
+      await naturalClick(page, atcButton)
 
       // Wait for cart count to update to confirm item was added
       // Use shorter timeout than the executeStep race timer to avoid ghost timeout

@@ -1,6 +1,7 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
+import { naturalClick } from '../naturalClick.ts'
 
 export async function completePayment(
   page: Page,
@@ -30,7 +31,7 @@ export async function completePayment(
         throw Object.assign(new Error('Payment continue button not ready'), { code: 'TIMEOUT' })
       }
 
-      await paymentButton.click()
+      await naturalClick(page, paymentButton)
 
       // Check for 3DS AFTER clicking — Nike may redirect to 3DS after payment selection
       const threeDSAfter = page.locator(selectors.checkout.threeDSIframe)

@@ -2,6 +2,8 @@ import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
 import { assertNotBlocked } from '../detectors/blockDetector.ts'
+import { dismissCookieConsent } from '../dismissCookies.ts'
+import { naturalClick } from '../naturalClick.ts'
 
 export async function selectSize(
   page: Page,
@@ -26,10 +28,12 @@ export async function selectSize(
     async () => {
       // Use a shorter timeout for goto so subsequent operations still have time
       // within the executeStep race timer
-      const gotoTimeout = Math.max(Math.floor(timeoutMs * 0.6), 2000)
+      const gotoTimeout = Math.max(Math.floor(timeoutMs * 0.5), 2000)
       const response = await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: gotoTimeout })
       await assertNotBlocked(page, response, selectors)
-      const selectorTimeout = Math.max(Math.floor(timeoutMs * 0.5), 2000)
+      // Dismiss Nike's cookie consent modal if it appears — otherwise it blocks clicks.
+      await dismissCookieConsent(page, selectors, 800)
+      const selectorTimeout = Math.max(Math.floor(timeoutMs * 0.4), 2000)
       await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: selectorTimeout })
 
       for (const size of targetSizes) {
@@ -38,7 +42,8 @@ export async function selectSize(
         const isVisible = await sizeButton.isVisible()
         const isEnabled = await sizeButton.isEnabled()
         if (isVisible && isEnabled) {
-          await sizeButton.click()
+          // Use natural mouse movement — Nike's Kasada detects teleported CDP clicks
+          await naturalClick(page, sizeButton)
           selectedSize = size
           return `size:${size}`
         }

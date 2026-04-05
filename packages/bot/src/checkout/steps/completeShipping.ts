@@ -1,6 +1,7 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
+import { naturalClick } from '../naturalClick.ts'
 
 export async function completeShipping(
   page: Page,
@@ -23,7 +24,7 @@ export async function completeShipping(
         throw Object.assign(new Error('Shipping continue button not ready'), { code: 'TIMEOUT' })
       }
 
-      await shippingButton.click()
+      await naturalClick(page, shippingButton)
 
       // Wait for payment section to appear to confirm shipping step is complete
       await page.waitForSelector(selectors.checkout.paymentSection, { timeout: innerTimeout })
