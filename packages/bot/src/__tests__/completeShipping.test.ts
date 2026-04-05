@@ -31,6 +31,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '',
     orderConfirmation: '',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 type Scenario = 'success' | 'button-disabled' | 'timeout-shipping' | 'timeout-payment'

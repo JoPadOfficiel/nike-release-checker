@@ -62,6 +62,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '[data-qa="submit-order"]',
     orderConfirmation: '[data-qa="order-confirmation"]',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 const OPTIONS: CheckoutPipelineOptions = {

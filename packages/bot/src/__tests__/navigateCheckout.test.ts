@@ -37,6 +37,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '',
     orderConfirmation: '',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 type Scenario = 'success' | 'blocked' | 'no-checkout-button' | 'timeout'
@@ -53,6 +54,11 @@ function makeMockPage(scenario: Scenario): Page {
         return {
           isVisible: async () => scenario !== 'no-checkout-button',
           click: async () => {},
+          waitFor: async (_opts?: { state?: string; timeout?: number }) => {
+            if (scenario === 'no-checkout-button') {
+              throw Object.assign(new Error('Timeout'), { code: 'TIMEOUT' })
+            }
+          },
         } as unknown as Locator
       }
       return {
@@ -60,6 +66,7 @@ function makeMockPage(scenario: Scenario): Page {
         click: async () => {},
       } as unknown as Locator
     },
+    goto: async (_url: string, _opts?: unknown) => null,
     waitForSelector: async (_sel: string, _opts?: unknown) => {
       if (scenario === 'timeout') {
         throw Object.assign(new Error('Timeout waiting for shipping section'), { code: 'TIMEOUT' })

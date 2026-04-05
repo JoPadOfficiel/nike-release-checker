@@ -37,6 +37,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '',
     orderConfirmation: '',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 type Scenario = 'success' | 'sold-out-indicator' | 'atc-disabled' | 'timeout'

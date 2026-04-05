@@ -31,6 +31,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '[data-qa="submit-order-button"]',
     orderConfirmation: '',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 type Scenario = 'success' | '3ds-before' | '3ds-after' | 'button-disabled' | 'timeout'

@@ -37,6 +37,7 @@ const BASE_SELECTORS: Selectors = {
     submitOrderButton: '',
     orderConfirmation: '',
   },
+  cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 function makeMockPage(scenario: 'size-available' | 'sold-out' | 'timeout'): Page {
