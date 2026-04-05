@@ -8,7 +8,11 @@ export interface SoldOutCheckResult {
   signal: SoldOutSignal
 }
 
-const SOLD_OUT_TEXT_PATTERN = /sold[\s-]?out|épuisé|ausverkauft|agotado|esaurito/i
+// Only trigger text detection on clear, page-wide "sold out" notices — not on
+// the word appearing in reviews/recommendations/footers. Keep the pattern tight:
+// must be in a heading, a price area, or an obvious notice. We scope the check
+// to the buying-tools area to avoid false positives from related products.
+const SOLD_OUT_TEXT_PATTERN = /^(sold\s?out|épuisé|rupture de stock|ausverkauft|agotado|esaurito)$/i
 
 /**
  * Checks for sold-out signals using three strategies:
@@ -51,11 +55,22 @@ export async function checkSoldOut(
     }
   }
 
-  // Signal 3: page text regex
+  // Signal 3: scoped text regex — ONLY inside the buying-tools container,
+  // not the whole page body (which often contains "sold out" in reviews, related
+  // products, or promo banners).
   try {
-    const bodyText = await page.textContent('body') ?? ''
-    if (SOLD_OUT_TEXT_PATTERN.test(bodyText)) {
-      return { soldOut: true, signal: 'text_detection' }
+    const buyingToolsText = await page.evaluate(() => {
+      const container = document.querySelector('[data-testid="buying-tools-container"]')
+      return container?.textContent ?? ''
+    })
+    if (buyingToolsText) {
+      // Split into words and check each one against the tight pattern
+      const words = buyingToolsText.split(/\s+/).filter(Boolean)
+      for (const word of words) {
+        if (SOLD_OUT_TEXT_PATTERN.test(word)) {
+          return { soldOut: true, signal: 'text_detection' }
+        }
+      }
     }
   } catch {
     // page not available — continue

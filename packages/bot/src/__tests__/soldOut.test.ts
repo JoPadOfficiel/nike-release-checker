@@ -6,25 +6,23 @@ function makePage(options: {
   badgeVisible?: boolean
   atcVisible?: boolean
   atcEnabled?: boolean
-  bodyText?: string
+  buyingToolsText?: string
 }): unknown {
-  const { badgeVisible = false, atcVisible = true, atcEnabled = true, bodyText = '' } = options
+  const { badgeVisible = false, atcVisible = true, atcEnabled = true, buyingToolsText = '' } = options
   return {
     locator: (selector: string) => {
-      // sold-out badge selector
       if (selector === '.sold-out-badge') {
         return {
           isVisible: async () => badgeVisible,
           isEnabled: async () => true,
         }
       }
-      // ATC button selector
       return {
         isVisible: async () => atcVisible,
         isEnabled: async () => atcEnabled,
       }
     },
-    textContent: async (_sel: string) => bodyText,
+    evaluate: async (_fn: () => string) => buyingToolsText,
   }
 }
 
@@ -66,7 +64,7 @@ const selectors = {
 describe('soldOutDetector', () => {
   test('returns not sold out when no signals detected', async () => {
     const { checkSoldOut } = await import('../checkout/detectors/soldOutDetector.ts')
-    const page = makePage({ badgeVisible: false, atcEnabled: true, bodyText: 'Available now!' })
+    const page = makePage({ badgeVisible: false, atcEnabled: true, buyingToolsText: 'Available now!' })
     const result = await checkSoldOut(page as never, selectors as never)
     assert.equal(result.soldOut, false)
     assert.equal(result.signal, null)
@@ -88,20 +86,20 @@ describe('soldOutDetector', () => {
     assert.equal(result.signal, 'button_disabled')
   })
 
-  test('detects text_detection signal for "sold out"', async () => {
+  test('detects text_detection signal for standalone "Épuisé" in buying-tools', async () => {
     const { checkSoldOut } = await import('../checkout/detectors/soldOutDetector.ts')
-    const page = makePage({ badgeVisible: false, atcEnabled: true, bodyText: 'Sorry, this product is sold out' })
+    const page = makePage({ badgeVisible: false, atcEnabled: true, buyingToolsText: 'Taille 42 Épuisé' })
     const result = await checkSoldOut(page as never, selectors as never)
     assert.equal(result.soldOut, true)
     assert.equal(result.signal, 'text_detection')
   })
 
-  test('detects text_detection signal for "épuisé" (French)', async () => {
+  test('does NOT trigger text_detection when "sold out" appears inside a longer sentence', async () => {
+    // The regex requires exact-token match, so embedded text in reviews/banners is ignored.
     const { checkSoldOut } = await import('../checkout/detectors/soldOutDetector.ts')
-    const page = makePage({ badgeVisible: false, atcEnabled: true, bodyText: 'Ce produit est épuisé' })
+    const page = makePage({ badgeVisible: false, atcEnabled: true, buyingToolsText: 'Sorry, this product is sold out today' })
     const result = await checkSoldOut(page as never, selectors as never)
-    assert.equal(result.soldOut, true)
-    assert.equal(result.signal, 'text_detection')
+    assert.equal(result.soldOut, false)
   })
 
   test('badge_sold_out takes priority over button_disabled', async () => {

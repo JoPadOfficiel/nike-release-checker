@@ -73,6 +73,17 @@ export const SelectorsSchema = v.object({
 			orderConfirmation: '',
 		},
 	),
+
+	// Cookie consent modal — appears on every Nike page and blocks interaction
+	// if not dismissed. Set to empty strings to skip dismissal.
+	cookieConsent: v.optional(
+		v.object({
+			modalRoot: v.optional(v.string(), ''),
+			declineButton: v.optional(v.string(), ''),
+			acceptButton: v.optional(v.string(), ''),
+		}),
+		{ modalRoot: '', declineButton: '', acceptButton: '' },
+	),
 })
 
 export type Selectors = v.InferOutput<typeof SelectorsSchema>
