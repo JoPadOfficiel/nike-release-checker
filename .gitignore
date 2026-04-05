@@ -25,10 +25,9 @@ _bmad-output
 .opencode
 .windsurf
 
-# Bot sensitive data
+# Bot sensitive data (sessions, cookies, accounts with credentials)
 packages/bot/.bot-data/
 bot.config.yaml
-packages/bot/selectors.yaml
 
 # Bot debug/live-test scripts + runtime artifacts
 packages/bot/scripts/.bot-data/
