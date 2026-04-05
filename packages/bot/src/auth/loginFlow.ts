@@ -1,6 +1,7 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../config/selectorSchema.ts'
 import type { LoginResult } from './auth.types.ts'
+import { dismissCookieConsent } from '../checkout/dismissCookies.ts'
 
 const LOGIN_URL = 'https://accounts.nike.com/'
 const STEP_TIMEOUT = 20_000
@@ -14,6 +15,9 @@ export async function performNikeLogin(
 	const startMs = Date.now()
 	try {
 		await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: STEP_TIMEOUT })
+
+		// Dismiss cookie consent modal before interacting with the login form.
+		await dismissCookieConsent(page, selectors, 1500)
 
 		// Step 1: Enter email and click continue
 		await page.waitForSelector(selectors.loginEmailInput, { timeout: STEP_TIMEOUT })

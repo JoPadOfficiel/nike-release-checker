@@ -31,6 +31,7 @@ const SEL: Selectors = {
 		submitOrderButton: '',
 		orderConfirmation: '',
 	},
+	cookieConsent: { modalRoot: '', declineButton: '', acceptButton: '' },
 }
 
 function makeMockPage(scenario: 'success' | 'error' | 'timeout' | 'goto-throws'): Page {
