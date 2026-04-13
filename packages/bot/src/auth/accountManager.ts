@@ -64,9 +64,10 @@ export async function importAccounts(filePath: string): Promise<ImportResult> {
 		toImport.push(account)
 	}
 
-	// Test proxies concurrently
+	// Test proxies concurrently (skip accounts without a proxy)
 	const proxyResults = await Promise.allSettled(
 		toImport.map(async (account) => {
+			if (!account.proxy) return { account, result: { success: true, latencyMs: 0 } }
 			const result = await testProxyConnectivity(account.proxy)
 			return { account, result }
 		}),

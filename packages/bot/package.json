@@ -11,6 +11,7 @@
 	},
 	"scripts": {
 		"dev": "node --import tsx --watch src/cli/index.ts",
+		"start": "node --import tsx src/cli/index.ts",
 		"test": "node --test 'src/**/*.test.ts'",
 		"typecheck": "tsc --noEmit"
 	},

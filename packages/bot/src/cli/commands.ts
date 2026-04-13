@@ -301,6 +301,77 @@ program
 	})
 
 program
+	.command('drop')
+	.description('Wait for a SKU to appear on Nike FR, then immediately checkout (or dry-run)')
+	.requiredOption('--sku <sku>', 'Nike SKU / styleColor code (e.g. IQ7604-101)')
+	.requiredOption('--profile <account_id>', 'Account ID to use for checkout')
+	.option('--sizes <sizes>', 'Target EU sizes comma-separated (e.g. 40,40.5,41)')
+	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.option('--dry-run', 'Simulate checkout without placing real order', false)
+	.option('--poll-interval <ms>', 'Feed poll interval in ms (default: 3000)', '3000')
+	.option('--timeout <ms>', 'Max time to wait for SKU to appear in ms (default: 3600000 = 1h)', '3600000')
+	.action(async (opts: { sku: string; profile: string; sizes?: string; selectors?: string; dryRun?: boolean; pollInterval: string; timeout: string }) => {
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+		const { loadBotConfig } = await import('../config/botConfig.ts')
+		const { loadSelectors } = await import('../config/selectors.ts')
+		const { resolveSkuToSlug } = await import('../monitor/poller.ts')
+		const { runCheckoutPipeline } = await import('../checkout/checkoutPipeline.ts')
+		const configPath = program.opts<{ config: string }>().config
+
+		try {
+			const accounts = await loadStoredAccounts()
+			const account = accounts.find((a) => a.id === opts.profile)
+			if (!account) {
+				console.error(`Error: Account '${opts.profile}' not found.`)
+				process.exit(1)
+			}
+			const config = await loadBotConfig(configPath)
+			const selectors = await loadSelectors(opts.selectors)
+			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : account.preferredSizes ?? []
+			const pollIntervalMs = parseInt(opts.pollInterval, 10)
+			const timeoutMs = parseInt(opts.timeout, 10)
+
+			console.log(`[drop] Waiting for SKU ${opts.sku} to appear on Nike FR...`)
+			console.log(`[drop] Poll interval: ${pollIntervalMs}ms — Timeout: ${timeoutMs / 1000}s`)
+			console.log(`[drop] Target sizes: ${targetSizes.join(', ')}`)
+			if (opts.dryRun) console.log(`[drop] DRY-RUN mode — no real order will be placed`)
+
+			const controller = new AbortController()
+			const timeoutTimer = setTimeout(() => {
+				controller.abort()
+				console.error(`[drop] Timeout: SKU ${opts.sku} never appeared after ${timeoutMs / 1000}s`)
+				process.exit(1)
+			}, timeoutMs)
+
+			const resolved = await resolveSkuToSlug(opts.sku, config, controller.signal, pollIntervalMs)
+			clearTimeout(timeoutTimer)
+
+			console.log(`[drop] ✓ SKU found! slug: ${resolved.slug}`)
+			console.log(`[drop] URL: ${resolved.productUrl}`)
+			console.log(`[drop] Launching checkout immediately...`)
+
+			const result = await runCheckoutPipeline(account, config, selectors, {
+				productUrl: resolved.productUrl,
+				targetSizes,
+				dryRun: opts.dryRun ?? false,
+			})
+
+			console.log(`[drop] Result: ${result.finalOutcome} (${result.durationMs}ms)`)
+			for (const step of result.steps) {
+				const status = step.outcome === 'success' ? '✓' : '✗'
+				console.log(`  ${status} ${step.step}: ${step.outcome}${step.details ? ` — ${step.details}` : ''}`)
+			}
+			if (result.finalOutcome !== 'success' && result.finalOutcome !== '3ds_success' && result.finalOutcome !== 'no_session') {
+				process.exit(1)
+			}
+		} catch (err) {
+			console.error(`❌ Drop failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
+	})
+
+program
 	.command('dry-run')
 	.description('Test the full checkout flow without placing an order')
 	.requiredOption('--slug <slug>', 'Nike product slug')

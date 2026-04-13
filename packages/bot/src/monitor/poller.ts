@@ -1,6 +1,72 @@
 import { getProductFeed, formatProductFeedResponse } from '@nike-release-checker/sdk'
 import type { BotConfig } from '../config/botConfigSchema.ts'
 
+export interface SkuResolveResult {
+  slug: string
+  productUrl: string
+  styleColor: string
+}
+
+/**
+ * Poll the Nike product feed until a SKU (styleColor, e.g. "IQ7604-101") appears.
+ * Nike publishes the product a few minutes before drop time — this function blocks
+ * until it shows up, then returns the slug and product URL ready for checkout.
+ *
+ * @param sku - The Nike styleColor code, e.g. "IQ7604-101"
+ * @param config - Bot config (market/language)
+ * @param signal - AbortSignal to cancel polling (e.g. on timeout)
+ * @param pollIntervalMs - How often to poll (default: 3000ms on drop day)
+ */
+export async function resolveSkuToSlug(
+  sku: string,
+  config?: BotConfig,
+  signal?: AbortSignal,
+  pollIntervalMs = 3000,
+): Promise<SkuResolveResult> {
+  const countryCode = (config?.checkout?.market ?? 'FR') as Parameters<typeof getProductFeed>[0]['countryCode']
+  const language = (config?.checkout?.language ?? 'fr') as Parameters<typeof getProductFeed>[0]['language']
+  const normalizedSku = sku.toUpperCase()
+
+  while (!signal?.aborted) {
+    const feed = await getProductFeed({ countryCode, language })
+
+    for (const thread of feed) {
+      const productInfos = (thread as any).productInfo ?? []
+      for (const pi of productInfos) {
+        const styleColor: string = pi?.merchProduct?.styleColor ?? ''
+        if (styleColor.toUpperCase() === normalizedSku) {
+          // Found — resolve slug from publishedContent nodes
+          const nodes: any[] = thread?.publishedContent?.nodes ?? []
+          let slug = ''
+          for (const node of nodes) {
+            const s = node?.properties?.slug ?? node?.nodes?.find((n: any) => n?.properties?.slug)?.properties?.slug
+            if (s) { slug = s; break }
+          }
+          // Fallback: search in full thread JSON
+          if (!slug) {
+            const match = JSON.stringify(thread).match(/"slug":"([^"]+)"/)
+            if (match) slug = match[1]!
+          }
+          if (!slug) throw new Error(`SKU ${sku} found in feed but no slug could be extracted`)
+          return {
+            slug,
+            productUrl: `https://www.nike.com/fr/launch/t/${slug}`,
+            styleColor,
+          }
+        }
+      }
+    }
+
+    process.stderr.write(`[resolveSkuToSlug] SKU ${sku} not in feed yet — retrying in ${pollIntervalMs}ms\n`)
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, pollIntervalMs)
+      signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+    })
+  }
+
+  throw new Error(`resolveSkuToSlug aborted before finding SKU ${sku}`)
+}
+
 export interface ProductStatus {
   slug: string
   availableSizes: string[]
