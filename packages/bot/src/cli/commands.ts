@@ -558,6 +558,14 @@ export function getSessionCardsKey(): Buffer | null {
 }
 
 program
+	.command('init')
+	.description('Interactive setup wizard — configure accounts, cards, addresses, capture sessions, dry-run')
+	.action(async () => {
+		const { runInitWizard } = await import('./wizard/initWizard.tsx')
+		runInitWizard()
+	})
+
+program
 	.command('status')
 	.description('Show daemon status and account session health')
 	.option('--json', 'Output status as structured JSON', false)
