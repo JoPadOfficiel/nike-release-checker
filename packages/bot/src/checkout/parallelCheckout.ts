@@ -5,6 +5,8 @@ import { maskEmail } from '../logger/credentialMasker.ts'
 import { printCheckoutSummary } from '../logger/terminal.ts'
 import { runCheckoutPipeline, type CheckoutPipelineResult } from './checkoutPipeline.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
+import { globalBus, type AccountStatus } from '../tui/eventBus.ts'
+import type { FinalOutcome } from './outcomeClassifier.ts'
 
 export interface ParallelCheckoutOptions {
   productUrl: string
@@ -57,6 +59,15 @@ export async function runParallelCheckout(
 
   console.log(`Running checkout for ${accounts.length} account(s) in parallel...`)
 
+  // Emit initial waiting status for each account so the TUI dashboard
+  // can flip the row from pending to waiting once the pipeline starts.
+  for (const account of accounts) {
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'selectSize' },
+    })
+  }
+
   // MUST use Promise.allSettled — never Promise.all
   const settled = await Promise.allSettled(
     accounts.map((account) =>
@@ -93,6 +104,10 @@ export async function runParallelCheckout(
         const lastStep = result.steps[result.steps.length - 1]
         console.log(`  ✗ ${maskedEmail} — ${result.finalOutcome}${lastStep?.error ? ` (${lastStep.error})` : ''}`)
       }
+      globalBus.emit('accountStatusChanged', {
+        accountId: account.id,
+        status: finalOutcomeToStatus(result.finalOutcome, targetSizes),
+      })
     } else {
       failed++
       const fakeResult: CheckoutPipelineResult = {
@@ -104,8 +119,18 @@ export async function runParallelCheckout(
       }
       results.push(fakeResult)
       console.log(`  ✗ ${maskedEmail} — pipeline threw: ${String(outcome.reason)}`)
+      globalBus.emit('accountStatusChanged', {
+        accountId: account.id,
+        status: { kind: 'fail', reason: 'ERROR' },
+      })
     }
   }
+
+  globalBus.emit('checkoutFinished', {
+    totalAccounts: accounts.length,
+    cops: complete,
+    failures: failed,
+  })
 
   const durationMs = Math.round(performance.now() - summaryStart)
   const summary: ParallelCheckoutSummary = {
@@ -128,4 +153,23 @@ export async function runParallelCheckout(
   )
 
   return summary
+}
+
+function finalOutcomeToStatus(outcome: FinalOutcome, targetSizes: string[]): AccountStatus {
+  switch (outcome) {
+    case 'success':
+    case '3ds_success':
+      return { kind: 'cop', size: targetSizes[0] ?? '' }
+    case 'sold_out':
+      return { kind: 'fail', reason: 'SOLD_OUT' }
+    case 'blocked':
+      return { kind: 'fail', reason: 'BLOCKED' }
+    case '3ds_timeout':
+      return { kind: 'fail', reason: 'THREEDS_TIMEOUT' }
+    case 'no_session':
+    case 'timeout':
+    case 'error':
+    default:
+      return { kind: 'fail', reason: 'ERROR' }
+  }
 }
