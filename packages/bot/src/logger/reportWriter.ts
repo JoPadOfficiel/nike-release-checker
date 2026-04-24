@@ -1,4 +1,4 @@
-import { writeFile, rename, mkdir, access } from 'node:fs/promises'
+import { writeFile, rename, mkdir, access, appendFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export type ReportStatus =
@@ -56,10 +56,37 @@ async function exists(p: string): Promise<boolean> {
 	}
 }
 
+function buildCsvRow(row: ReportRow): string {
+	return [
+		escapeCsvCell(row.account_id),
+		escapeCsvCell(row.status),
+		escapeCsvCell(row.sku),
+		escapeCsvCell(row.size),
+		escapeCsvCell(row.order_number),
+		escapeCsvCell(row.timestamp),
+		escapeCsvCell(maskCredentials(row.error_reason)),
+		escapeCsvCell(row.duration_ms),
+		escapeCsvCell(row.retry_attempt),
+	].join(',')
+}
+
+export interface WriteReportOptions {
+	appendToFile?: string
+}
+
 export async function writeReport(
 	rows: ReportRow[],
 	folder = './reports',
+	opts: WriteReportOptions = {},
 ): Promise<string> {
+	if (opts.appendToFile) {
+		const file = opts.appendToFile
+		if (rows.length === 0) return file
+		const body = rows.map(buildCsvRow).join('\n') + '\n'
+		await appendFile(file, body, 'utf8')
+		return file
+	}
+
 	await mkdir(folder, { recursive: true, mode: 0o755 })
 	const ts = new Date()
 	const yyyy = ts.getFullYear()
@@ -79,19 +106,7 @@ export async function writeReport(
 
 	const lines: string[] = [HEADER.join(',')]
 	for (const row of rows) {
-		lines.push(
-			[
-				escapeCsvCell(row.account_id),
-				escapeCsvCell(row.status),
-				escapeCsvCell(row.sku),
-				escapeCsvCell(row.size),
-				escapeCsvCell(row.order_number),
-				escapeCsvCell(row.timestamp),
-				escapeCsvCell(maskCredentials(row.error_reason)),
-				escapeCsvCell(row.duration_ms),
-				escapeCsvCell(row.retry_attempt),
-			].join(','),
-		)
+		lines.push(buildCsvRow(row))
 	}
 	await writeFile(tmp, lines.join('\n') + '\n', 'utf8')
 	await rename(tmp, file)

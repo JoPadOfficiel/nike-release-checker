@@ -136,6 +136,62 @@ test('timestamp ISO format appears in output', async () => {
 	}
 })
 
+test('appendToFile: new file then append 2 rows → header + original + 2 new, no extra header', async () => {
+	const dir = await makeTmp()
+	try {
+		const original: ReportRow[] = [
+			{
+				account_id: 'a1',
+				status: 'COP',
+				sku: 's',
+				timestamp: '2026-04-24T12:00:00.000Z',
+				duration_ms: 10,
+			},
+		]
+		const file = await writeReport(original, dir)
+
+		const extra: ReportRow[] = [
+			{
+				account_id: 'a2',
+				status: 'BLOCKED',
+				sku: 's',
+				timestamp: '2026-04-24T12:00:01.000Z',
+				duration_ms: 20,
+				retry_attempt: 2,
+			},
+			{
+				account_id: 'a3',
+				status: 'ERROR',
+				sku: 's',
+				timestamp: '2026-04-24T12:00:02.000Z',
+				duration_ms: 30,
+				retry_attempt: 2,
+			},
+		]
+		const appended = await writeReport(extra, dir, { appendToFile: file })
+		assert.equal(appended, file, 'append returns the same path')
+
+		const content = await readFile(file, 'utf8')
+		const lines = content.split('\n').filter((l) => l.length > 0)
+		assert.equal(lines.length, 1 + 1 + 2, 'header + 1 original + 2 appended')
+		assert.equal(
+			lines[0],
+			'account_id,status,sku,size,order_number,timestamp,error_reason,duration_ms,retry_attempt',
+		)
+		// Ensure header appears exactly once.
+		const headerCount = (content.match(/^account_id,status,sku/gm) ?? []).length
+		assert.equal(headerCount, 1, 'header must not be duplicated on append')
+		assert.ok(lines[1].startsWith('a1,COP,'))
+		assert.ok(lines[2].startsWith('a2,BLOCKED,'))
+		assert.ok(lines[3].startsWith('a3,ERROR,'))
+		// Only one file in the directory (append didn't create a second one).
+		const entries = await readdir(dir)
+		assert.equal(entries.length, 1)
+	} finally {
+		await cleanup(dir)
+	}
+})
+
 test('empty rows produce header-only file with trailing newline', async () => {
 	const dir = await makeTmp()
 	try {
