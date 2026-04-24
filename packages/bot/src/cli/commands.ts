@@ -479,6 +479,84 @@ program
 		console.log(`Daemon stopped (PID: ${pid})`)
 	})
 
+// Module-scoped cards key — held in memory only, never persisted.
+// Populated by `cards unlock` for future drop-time retrieval; v1 is a placeholder.
+let cardsKey: Buffer | null = null
+
+const cards = program.command('cards').description('Manage encrypted payment cards')
+
+cards
+	.command('import')
+	.description('Import cards from a CSV file into the encrypted SQLite store')
+	.requiredOption('--file <path>', 'Path to the cards.csv file')
+	.action(async (opts: { file: string }) => {
+		const { promptPassphrase } = await import('./prompts.ts')
+		const { initWithPassphrase, importCardsCsv } = await import('../config/cardsStore.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		try {
+			const passphrase = await promptPassphrase('Passphrase: ')
+			const { key } = initWithPassphrase(passphrase)
+			const result = await importCardsCsv(opts.file, key)
+			if (result.errors.length > 0) {
+				console.error(`❌ Import aborted — ${result.errors.length} validation error(s):`)
+				for (const err of result.errors) {
+					const suffix = err.suggestion ? ` (${err.suggestion})` : ''
+					console.error(`  row ${err.row} [${err.column}]: ${err.message}${suffix}`)
+				}
+				process.exit(1)
+			}
+			console.log(`✓ Imported ${result.imported} card(s). Source renamed to *.imported.`)
+		} catch (err) {
+			console.error(`❌ Cards import failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
+	})
+
+cards
+	.command('reset')
+	.description('Move the encrypted cards DB aside (backup) so a new passphrase can be set')
+	.action(async () => {
+		const { promptLine } = await import('./prompts.ts')
+		const { resetDb } = await import('../config/cardsStore.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		try {
+			const answer = await promptLine('This will move the cards DB aside. Type "yes" to confirm: ')
+			if (answer.trim().toLowerCase() !== 'yes') {
+				console.log('Aborted.')
+				return
+			}
+			const backup = resetDb()
+			if (backup) console.log(`✓ DB moved to ${backup}`)
+			else console.log('No existing DB to reset.')
+		} catch (err) {
+			console.error(`❌ Cards reset failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
+	})
+
+cards
+	.command('unlock')
+	.description('Unlock the encrypted cards DB for the current session (validates passphrase)')
+	.action(async () => {
+		const { promptPassphrase } = await import('./prompts.ts')
+		const { initWithPassphrase } = await import('../config/cardsStore.ts')
+		const { maskCredentials } = await import('../logger/credentialMasker.ts')
+		try {
+			const passphrase = await promptPassphrase('Passphrase: ')
+			const { key } = initWithPassphrase(passphrase)
+			cardsKey = key
+			console.log('✓ Cards DB unlocked for this session.')
+		} catch (err) {
+			console.error(`❌ Unlock failed: ${maskCredentials(String(err))}`)
+			process.exit(1)
+		}
+	})
+
+// Exposed for future drop-time access; not wired up in v1.
+export function getSessionCardsKey(): Buffer | null {
+	return cardsKey
+}
+
 program
 	.command('status')
 	.description('Show daemon status and account session health')
