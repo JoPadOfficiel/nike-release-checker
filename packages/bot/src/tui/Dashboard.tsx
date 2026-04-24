@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import { AccountRow } from './AccountRow.tsx'
 import { globalBus, type AccountStatus } from './eventBus.ts'
+import { AnimationsProvider } from './AnimationsContext.tsx'
+import { CountAnimation } from './primitives/CountAnimation.tsx'
 
 export interface RowState {
 	accountId: string
@@ -68,36 +70,38 @@ export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps
 	const inProgress = rows.length - cops - fails
 
 	return (
-		<Box flexDirection='column'>
-			<Box>
-				<Text bold>Drop: </Text>
-				<Text color='cyan'>{sku}</Text>
-				<Text> — Sizes: </Text>
-				<Text>{sizes.join(', ')}</Text>
-				<Text> — Accounts: </Text>
-				<Text>{rows.length}</Text>
+		<AnimationsProvider>
+			<Box flexDirection='column'>
+				<Box>
+					<Text bold>Drop: </Text>
+					<Text color='cyan'>{sku}</Text>
+					<Text> — Sizes: </Text>
+					<Text>{sizes.join(', ')}</Text>
+					<Text> — Accounts: </Text>
+					<Text>{rows.length}</Text>
+				</Box>
+				<Box flexDirection='column' marginY={1}>
+					{rows.map((r) => (
+						<AccountRow
+							key={r.accountId}
+							accountId={r.accountId}
+							status={r.status}
+							elapsedMs={now - r.startedAt}
+						/>
+					))}
+				</Box>
+				<Box>
+					<Text>Cops: </Text>
+					<CountAnimation value={cops} color='green' />
+					<Text>   Failed: </Text>
+					<CountAnimation value={fails} color='red' />
+					<Text>   In progress: </Text>
+					<CountAnimation value={inProgress} color='yellow' />
+				</Box>
+				<Box marginTop={1}>
+					<Text dimColor>Press ESC to abort new starts.</Text>
+				</Box>
 			</Box>
-			<Box flexDirection='column' marginY={1}>
-				{rows.map((r) => (
-					<AccountRow
-						key={r.accountId}
-						accountId={r.accountId}
-						status={r.status}
-						elapsedMs={now - r.startedAt}
-					/>
-				))}
-			</Box>
-			<Box>
-				<Text>Cops: </Text>
-				<Text color='green'>{cops}</Text>
-				<Text>   Failed: </Text>
-				<Text color='red'>{fails}</Text>
-				<Text>   In progress: </Text>
-				<Text color='yellow'>{inProgress}</Text>
-			</Box>
-			<Box marginTop={1}>
-				<Text dimColor>Press ESC to abort new starts.</Text>
-			</Box>
-		</Box>
+		</AnimationsProvider>
 	)
 }

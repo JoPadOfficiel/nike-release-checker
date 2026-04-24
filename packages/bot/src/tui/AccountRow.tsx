@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { Box, Text } from 'ink'
 import type { AccountStatus } from './eventBus.ts'
+import { FadeHighlight } from './primitives/FadeHighlight.tsx'
 
 const TRUNC = 16
 
@@ -45,13 +46,17 @@ export const AccountRow = ({ accountId, status, elapsedMs }: AccountRowProps) =>
 		status.kind === 'cop' && status.orderNumber ? `order ${status.orderNumber}` : ''
 	const elapsed = elapsedMs !== undefined ? `${(elapsedMs / 1000).toFixed(1)}s` : ''
 
+	const flashColor: 'green' | 'red' | 'yellow' =
+		status.kind === 'cop' ? 'green' : status.kind === 'fail' ? 'red' : 'yellow'
 	return (
-		<Box>
-			<Text>{trunc(accountId)}</Text>
-			<Text color={color}> {glyph} </Text>
-			<Text>{stepLabel.padEnd(20).slice(0, 20)}</Text>
-			<Text dimColor> {elapsed.padStart(6)} </Text>
-			<Text>{detail}</Text>
-		</Box>
+		<FadeHighlight triggerKey={status.kind} color={flashColor}>
+			<Box>
+				<Text>{trunc(accountId)}</Text>
+				<Text color={color}> {glyph} </Text>
+				<Text>{stepLabel.padEnd(20).slice(0, 20)}</Text>
+				<Text dimColor> {elapsed.padStart(6)} </Text>
+				<Text>{detail}</Text>
+			</Box>
+		</FadeHighlight>
 	)
 }
