@@ -558,6 +558,25 @@ export function getSessionCardsKey(): Buffer | null {
 }
 
 program
+	.command('install-browser')
+	.description('Download and install Playwright Chromium (usually auto-run on first launch)')
+	.option('--proxy <url>', 'HTTP/HTTPS proxy for download (e.g. http://corp:8080)')
+	.action(async (opts: { proxy?: string }) => {
+		const { installChromium } = await import('../installer/chromiumInstaller.ts')
+		console.log('Installing Chromium...')
+		try {
+			await installChromium({
+				proxy: opts.proxy,
+				onProgress: (e) => process.stdout.write(`\r${e.phase}: ${e.percent}%   `),
+			})
+			console.log('\n✓ Chromium installed.')
+		} catch (err) {
+			console.error('\n✗ Failed:', (err as Error).message)
+			process.exit(1)
+		}
+	})
+
+program
 	.command('init')
 	.description('Interactive setup wizard — configure accounts, cards, addresses, capture sessions, dry-run')
 	.action(async () => {
