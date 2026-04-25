@@ -15,6 +15,15 @@ export const BotConfigSchema = v.object({
 			currency: v.optional(v.string(), 'EUR'),
 			defaultSizes: v.optional(v.array(v.string()), []),
 			stepTimeoutMs: v.optional(v.pipe(v.number(), v.minValue(1000)), 8000),
+			/**
+			 * Pipeline mode. Default: 'dom' for self-hosted, 'hybrid' for SaaS.
+			 * See HYBRID_PIPELINE.md for step ownership table.
+			 */
+			pipeline: v.optional(v.picklist(['dom', 'hybrid'] as const)),
+			/**
+			 * Deployment tier. When 'saas' and pipeline is unset, defaults to 'hybrid'.
+			 */
+			tier: v.optional(v.picklist(['self-hosted', 'saas'] as const)),
 		}),
 		{ market: 'FR', language: 'fr', currency: 'EUR', defaultSizes: [], stepTimeoutMs: 8000 },
 	),

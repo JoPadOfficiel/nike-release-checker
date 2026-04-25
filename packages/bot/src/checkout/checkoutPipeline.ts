@@ -1,3 +1,12 @@
+// checkoutPipeline — dispatcher that routes to domPipeline (v2) or hybridPipeline (v3)
+// based on the `checkout.pipeline` config flag (Story 12.7).
+//
+// Default resolution:
+//   - explicit `pipeline: 'hybrid'` → hybridPipeline
+//   - explicit `pipeline: 'dom'` → domPipeline
+//   - `tier: 'saas'` (and no explicit pipeline) → hybridPipeline
+//   - otherwise → domPipeline (safe default for self-hosted)
+
 import type { BrowserContext, Page } from 'playwright'
 import type { BotConfig } from '../config/botConfigSchema.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
@@ -5,19 +14,12 @@ import type { Selectors } from '../config/selectorSchema.ts'
 import { createRealCheckoutContext } from '../stealth/realCheckoutContext.ts'
 import type { RealChromeHandle } from '../stealth/realChrome.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
-import { logStep } from '../logger/logger.ts'
-import { printStepResult } from '../logger/terminal.ts'
 import { registerContext, unregisterContext } from '../daemon/gracefulShutdown.ts'
-import type { StepResult, StepOutcome } from './executeStep.ts'
-import { classifyOutcome, type FinalOutcome } from './outcomeClassifier.ts'
-import { selectSize } from './steps/selectSize.ts'
-import { addToCart } from './steps/addToCart.ts'
-import { navigateCheckout } from './steps/navigateCheckout.ts'
-import { completeShipping, type ShippingAddress } from './steps/completeShipping.ts'
-import { completePayment, type CardData } from './steps/completePayment.ts'
-import { handle3DSIfRequired } from './steps/handle3DS.ts'
-import { submitOrder } from './steps/submitOrder.ts'
-import { globalBus } from '../tui/eventBus.ts'
+import type { StepResult } from './executeStep.ts'
+import type { FinalOutcome } from './outcomeClassifier.ts'
+import type { ShippingAddress } from './steps/completeShipping.ts'
+import type { CardData } from './steps/completePayment.ts'
+import { runDomPipeline } from './pipelines/domPipeline.ts'
 
 export interface CheckoutPipelineResult {
   accountId: string
@@ -42,6 +44,13 @@ export interface CheckoutPipelineOptions {
    * the row before invoking. Optional for the same reason as shippingAddress.
    */
   card?: CardData
+  /**
+   * Hybrid-pipeline extra fields — only used when pipeline === 'hybrid'.
+   */
+  styleColor?: string
+  slug?: string
+  country?: string
+  currency?: string
 }
 
 /**
@@ -92,6 +101,17 @@ async function safeCreateRealCheckoutContext(
   })
 }
 
+/**
+ * Resolve the effective pipeline mode from config.
+ * Priority: explicit `checkout.pipeline` > tier-based default > 'dom'.
+ */
+function resolvePipelineMode(config: BotConfig): 'dom' | 'hybrid' {
+  const explicit = config.checkout?.pipeline
+  if (explicit !== undefined) return explicit
+  if (config.checkout?.tier === 'saas') return 'hybrid'
+  return 'dom'
+}
+
 export async function runCheckoutPipeline(
   account: AccountConfig,
   config: BotConfig,
@@ -100,14 +120,10 @@ export async function runCheckoutPipeline(
 ): Promise<CheckoutPipelineResult> {
   const pipelineStart = performance.now()
   const maskedEmail = maskEmail(account.email)
-  const stepTimeoutMs = config.checkout?.stepTimeoutMs ?? 8000
   const { productUrl, targetSizes, dryRun = false, shippingAddress, card } = options
 
   console.log(`[checkout] Starting pipeline for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
-  // Use real Chrome via CDP — bypasses Kasada's Playwright-launch detection.
-  // This spawns Chrome as an independent process with a per-account persistent
-  // profile, injects session snapshot, and completes OAuth handshake.
   let handle: RealChromeHandle
   try {
     handle = await safeCreateRealCheckoutContext(account)
@@ -129,145 +145,45 @@ export async function runCheckoutPipeline(
   registerContext(context)
 
   try {
-    // Reuse existing page (Chrome opens with a default new-tab page) instead of creating a new one.
-    // After OAuth handshake, this page is at www.nike.com/member/profile.
     const page = handle.context.pages()[0] ?? (await handle.context.newPage())
-    const steps: StepResult[] = []
+    const mode = resolvePipelineMode(config)
 
-    // Step 1: Select size
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'selectSize' },
+    if (mode === 'hybrid') {
+      // Dynamic import so dom-only deployments don't pay the parse cost.
+      const { runHybridPipeline } = await import('./pipelines/hybridPipeline.ts')
+      return runHybridPipeline(page, account, config, selectors, {
+        productUrl,
+        targetSizes,
+        styleColor: options.styleColor ?? '',
+        slug: options.slug ?? '',
+        country: options.country,
+        currency: options.currency,
+        dryRun,
+        shippingAddress: shippingAddress !== undefined
+          ? {
+              firstName: shippingAddress.firstName ?? '',
+              lastName: shippingAddress.lastName ?? '',
+              line1: shippingAddress.street,
+              city: shippingAddress.city,
+              postalCode: shippingAddress.zip,
+              country: shippingAddress.country,
+              phone: shippingAddress.phone ?? '',
+            }
+          : undefined,
+        card,
+      })
+    }
+
+    // DOM pipeline — v2 path unchanged.
+    return runDomPipeline(page, account, config, selectors, {
+      productUrl,
+      targetSizes,
+      dryRun,
+      shippingAddress,
+      card,
     })
-    const sizeResult = await selectSize(page, productUrl, targetSizes, selectors, stepTimeoutMs)
-    steps.push(sizeResult)
-    logStep(account.email, sizeResult)
-    printStepResult(sizeResult)
-    if (sizeResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, sizeResult.outcome, pipelineStart)
-    }
-
-    // Step 2: Add to cart
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'addToCart' },
-    })
-    const cartResult = await addToCart(page, selectors, stepTimeoutMs)
-    steps.push(cartResult)
-    logStep(account.email, cartResult)
-    printStepResult(cartResult)
-    if (cartResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, cartResult.outcome, pipelineStart)
-    }
-
-    // Step 3: Navigate to checkout
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'navigateCheckout' },
-    })
-    const navResult = await navigateCheckout(page, selectors, stepTimeoutMs)
-    steps.push(navResult)
-    logStep(account.email, navResult)
-    printStepResult(navResult)
-    if (navResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, navResult.outcome, pipelineStart)
-    }
-
-    // Step 4: Complete shipping
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'completeShipping' },
-    })
-    const shippingResult = await completeShipping(page, selectors, { timeoutMs: stepTimeoutMs, address: shippingAddress })
-    steps.push(shippingResult)
-    logStep(account.email, shippingResult)
-    printStepResult(shippingResult)
-    if (shippingResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, shippingResult.outcome, pipelineStart)
-    }
-
-    // Step 5: Complete payment
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'completePayment' },
-    })
-    const paymentResult = await completePayment(page, selectors, { timeoutMs: stepTimeoutMs, card })
-    steps.push(paymentResult)
-    logStep(account.email, paymentResult)
-    printStepResult(paymentResult)
-    if (paymentResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, paymentResult.outcome, pipelineStart)
-    }
-
-    // Step 5b: Handle 3DS if required
-    const threeDSStepResult = await handle3DSIfRequired(page, selectors, stepTimeoutMs)
-    const effectiveResult: StepResult = threeDSStepResult ?? {
-      step: '3ds-check',
-      outcome: 'success' as const,
-      durationMs: 0,
-      details: 'not_required',
-    }
-    steps.push(effectiveResult)
-    logStep(account.email, effectiveResult)
-    printStepResult(effectiveResult)
-    if (effectiveResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, effectiveResult.outcome, pipelineStart)
-    }
-
-    // Step 6: Submit order (dry-run aware)
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: dryRun ? 'dryRun' : 'submitOrder' },
-    })
-    const submitResult = await submitOrder(page, selectors, dryRun, stepTimeoutMs)
-    steps.push(submitResult)
-    logStep(account.email, submitResult)
-    printStepResult(submitResult)
-    if (submitResult.outcome !== 'success') {
-      return buildResult(account.id, maskedEmail, steps, submitResult.outcome, pipelineStart)
-    }
-
-    const finalOutcome = classifyOutcome(steps)
-    console.log(`[checkout] Pipeline complete for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
-
-    return {
-      accountId: account.id,
-      accountEmail: maskedEmail,
-      steps,
-      finalOutcome,
-      durationMs: Math.round(performance.now() - pipelineStart),
-    }
   } finally {
     unregisterContext(context)
     await handle.close().catch(() => undefined)
-  }
-}
-
-function stepOutcomeToFinal(outcome: StepOutcome): FinalOutcome {
-  switch (outcome) {
-    case 'success': return 'success'
-    case 'sold_out': return 'sold_out'
-    case 'blocked': return 'blocked'
-    case '3ds_required': return 'error' // 3DS detected but unresolved at pipeline level
-    case '3ds_timeout': return '3ds_timeout'
-    case 'timeout': return 'timeout'
-    case 'no_session': return 'no_session'
-    case 'error': return 'error'
-  }
-}
-
-function buildResult(
-  accountId: string,
-  accountEmail: string,
-  steps: StepResult[],
-  outcome: StepOutcome,
-  pipelineStart: number,
-): CheckoutPipelineResult {
-  return {
-    accountId,
-    accountEmail,
-    steps,
-    finalOutcome: stepOutcomeToFinal(outcome),
-    durationMs: Math.round(performance.now() - pipelineStart),
   }
 }
