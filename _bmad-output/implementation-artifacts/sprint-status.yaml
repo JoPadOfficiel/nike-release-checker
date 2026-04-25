@@ -1,0 +1,502 @@
+project: nike-release-checker
+branch: epic/bot-package
+last_updated: "2026-04-05" # epic 8 added: live Kasada bypass + real Chrome integration (5/9 done)
+
+epics:
+  - id: 1
+    title: "Project Foundation & Bot Package Setup"
+    stories:
+      - id: "1-1"
+        title: "Scaffold Bot Package in Monorepo"
+        file: stories/1-1-scaffold-bot-package.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): scaffold bot package structure — story 1-1"
+        notes: "10/10 unit tests pass. Workspace resolved. tsc clean."
+
+      - id: "1-2"
+        title: "CLI Entry Point with Argument Parsing"
+        file: stories/1-2-cli-entry-point.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): CLI entry point with 7 commands — story 1-2"
+        notes: "7/7 tests pass. Commander 13.1.0, createRequire for version, two-file split."
+
+      - id: "1-3"
+        title: "Configuration Loader (bot.config.yaml)"
+        file: stories/1-3-configuration-loader.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): configuration loader with Valibot validation — story 1-3"
+        notes: "6/6 unit tests pass. 23/23 total. tsc clean. Async loader, ValiError flatten."
+
+      - id: "1-4"
+        title: "Externalized Selector Configuration"
+        file: stories/1-4-externalized-selectors.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): externalized selectors loader with Valibot validation — story 1-4"
+        notes: "7/7 tests pass. 30/30 total. Flat schema, all keys required, async loader, v.flatten errors."
+
+  - id: 2
+    title: "Account Management & Authentication"
+    stories:
+      - id: "2-1"
+        title: "Import Accounts from JSON"
+        file: stories/2-1-import-accounts.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "fix(bot): apply 13 code review patches for story 2-1"
+        notes: "19/19 tests. 13 review patches applied: chmod TOCTOU, IPv6 proxy, double reject, TLS NaN, socks5 masking, cred leak, JSON validation, email dedup, denominator fix, processedAccounts, dead code removed."
+      - id: "2-2"
+        title: "Authenticate All Accounts (Login Flow)"
+        file: stories/2-2-authenticate-all-accounts.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "fix(bot): apply 6 code review patches for story 2-2"
+        notes: "12 new tests (loginFlow ×5, cookieStore ×7). 61/61 total. tsc clean. 6 review patches applied: race loser leak, path traversal, browser leak, context.close masking, TOCTOU textContent, loginResult.error masking."
+      - id: "2-3"
+        title: "Authenticate Single Account"
+        file: stories/2-3-authenticate-single-account.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "fix(bot): apply 3 code review patches for story 2-3"
+        notes: "65/65 total. tsc clean. 3 review patches: I/O error catch, CLI display format match spec, valid-ID test added."
+      - id: "2-4"
+        title: "List Accounts with Session Status"
+        file: stories/2-4-list-accounts-status.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "fix(bot): apply 4 code review patches for story 2-4"
+        notes: "78/78 total. tsc clean. 4 patches + 2 deferred fixed: all 3 critical cookies checked, Promise.all parallelization, sid-absent→expired, leading-dot domain, reduce spread, null filter."
+      - id: "2-5"
+        title: "Clear Sessions and Logout"
+        file: stories/2-5-clear-sessions-logout.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): logout / clear sessions command — story 2-5"
+        notes: "4 new tests (clearAllSessions ×2, clearSession ×2). 82/82 total. tsc clean. 4 review patches: TOCTOU unlink, Promise.allSettled, maskCredentials on account ID, test isolation exact count."
+      - id: "2-6"
+        title: "Load Cookies into Browser Context"
+        file: stories/2-6-load-cookies-context.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "fix(bot): apply 4 code review patches for story 2-6"
+        notes: "15→17 tests (loadCookies ×6, injectCookies ×2, loadAndInjectCookies ×2). 75/75 total. tsc clean. 4 patches: sanitizeAccountId guard, path.join, full field validation, edge-case tests."
+
+  - id: 3
+    title: "Stealth Browser Engine"
+    stories:
+      - id: "3-1"
+        title: "Playwright Stealth Context Factory"
+        file: stories/3-1-stealth-context-factory.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): stealth context factory with anti-detection — story 3-1"
+        notes: "4 review patches: resource leak if addInitScript throws, proxy empty-string guard, browser.close() error logging, navigator.plugins realistic objects."
+      - id: "3-2"
+        title: "Per-Account Proxy Isolation"
+        file: stories/3-2-proxy-isolation.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): per-account proxy isolation and proxy validator — story 3-2"
+        notes: "6 review patches: parseProxyUrl port default + URL validation + scheme check, testProxy non-JSON response + body validation, maskProxyUrl + formatProxyError exports, waitUntil networkidle→load."
+      - id: "3-3"
+        title: "Cookie Injection and Session Isolation"
+        file: stories/3-3-cookie-injection-isolation.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): cookie injection isolation and checkout context helper — story 3-3"
+        notes: "2 review patches: context.close() in catch suppressed to preserve original error, cookie log format with per-domain count breakdown."
+      - id: "3-4"
+        title: "French Locale and Geolocation Headers"
+        file: stories/3-4-french-locale-headers.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): French locale config and geolocation headers — story 3-4"
+        notes: "6 review patches: buildLocaleConfig optional _language param, Accept-Language header aligned (fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7), Object.hasOwn prototype safety, shallow clone mutable ref, navigator.languages=['fr-FR','fr','en-US','en'], test Accept-Language strict equality."
+
+  - id: 4
+    title: "Checkout Flow Automation"
+    stories:
+      - id: "4-1"
+        title: "Navigate to Product and Select Size"
+        file: stories/4-1-select-size.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): executeStep pattern and select size step — story 4-1"
+        notes: "4 unit tests. executeStep: timer cleared in finally, Playwright TimeoutError detection. selectSize: goto uses timeoutMs (not 15s hardcoded)."
+      - id: "4-2"
+        title: "Add to Cart"
+        file: stories/4-2-add-to-cart.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): add to cart step with sold-out detection — story 4-2"
+        notes: "4 unit tests. soldOutIndicator check + ATC button disabled check both map to sold_out."
+      - id: "4-3"
+        title: "Navigate to Checkout"
+        file: stories/4-3-navigate-checkout.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): navigate to checkout step — story 4-3"
+        notes: "4 unit tests. blockDetectionSignal checked first. Invisible checkout button → blocked."
+      - id: "4-4"
+        title: "Complete Shipping Step"
+        file: stories/4-4-complete-shipping.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): complete shipping step — story 4-4"
+        notes: "4 unit tests. waitForSelector + button enabled/visible + click + wait for paymentSection."
+      - id: "4-5"
+        title: "Complete Payment Step"
+        file: stories/4-5-complete-payment.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): complete payment step with 3DS detection — story 4-5"
+        notes: "5 unit tests. 3DS iframe checked BEFORE and AFTER click. Both trigger 3ds_required."
+      - id: "4-6"
+        title: "Submit Order"
+        file: stories/4-6-submit-order.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): submit order and checkout pipeline orchestrator — story 4-6"
+        notes: "4 pipeline tests. dry-run first (no page interaction). Dead ternary removed (dryRun ? complete : complete). finalOutcome type: StepOutcome | 'complete'."
+      - id: "4-7"
+        title: "Parallel Multi-Account Checkout Execution"
+        file: stories/4-7-parallel-multi-account.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): parallel multi-account checkout with Promise.allSettled — story 4-7"
+        notes: "4 unit tests. Promise.allSettled enforced by source-level test. ParallelCheckoutSummary with total/complete/failed/noSession."
+      - id: "4-8"
+        title: "Dry-Run Mode"
+        file: stories/4-8-dry-run-mode.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): dry-run mode complete and verified end-to-end — story 4-8"
+        notes: "CLI dry-run command. dryRun=true short-circuits submitOrder before any page interaction. [DRY-RUN] details in result."
+
+  - id: 5
+    title: "Error Handling, Diagnostics & 3D Secure"
+    stories:
+      - id: "5-1"
+        title: "Checkout Step Timing and Structured Logging"
+        file: stories/5-1-structured-logging.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): structured NDJSON logging with credential masking — story 5-1"
+        notes: "6/6 tests. NDJSON file logging, maskEmail on all entries, configureLogger, logStep. Integrated into checkoutPipeline."
+      - id: "5-2"
+        title: "Colorized Terminal Output"
+        file: stories/5-2-colorized-terminal-output.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): colorized terminal output with ANSI via node:util styleText — story 5-2"
+        notes: "4/4 tests. node:util styleText only, no chalk. printCheckoutHeader, printStepResult, printCheckoutSummary. Integrated into checkoutPipeline and parallelCheckout."
+      - id: "5-3"
+        title: "Sold Out Detection"
+        file: stories/5-3-sold-out-detection.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): sold-out detection with 3 signals — story 5-3"
+        notes: "6/6 tests. badge_sold_out, button_disabled, text_detection signals. Integrated into addToCart."
+      - id: "5-4"
+        title: "Akamai/Cloudflare Block Detection"
+        file: stories/5-4-block-detection.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): block detection for Akamai/403/captcha/Cloudflare — story 5-4"
+        notes: "7/7 tests. detectBlock + assertNotBlocked. Integrated into selectSize after page.goto. Added blockIndicator to selectorSchema."
+      - id: "5-5"
+        title: "3D Secure Detection and Pause"
+        file: stories/5-5-3ds-detection-pause.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): 3DS detection, pause, and waitFor3DSCompletion — story 5-5"
+        notes: "5/5 tests. detect3DS, waitFor3DSCompletion, handle3DSIfRequired. Inserted as step 5b in checkoutPipeline between payment and submit."
+      - id: "5-6"
+        title: "3D Secure Resume After Validation"
+        file: stories/5-6-3ds-resume.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): 3DS resume and 3ds_success outcome classification — story 5-6"
+        notes: "2/2 tests. handle3DSIfRequired returns success+3ds_completed on iframe disappear. classifyOutcome returns 3ds_success for 3ds-validation step."
+      - id: "5-7"
+        title: "Checkout Outcome Classification"
+        file: stories/5-7-outcome-classification.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): outcome classification for all 8 outcome types — story 5-7"
+        notes: "10/10 tests. FinalOutcome type, classifyOutcome, outcomeMessage. CheckoutPipelineResult.finalOutcome updated to FinalOutcome. parallelCheckout updated from 'complete' to 'success'/'3ds_success'."
+      - id: "5-8"
+        title: "Pre-Checkout Session Validation"
+        file: stories/5-8-session-validation.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): pre-checkout session validation with expiry detection — story 5-8"
+        notes: "3/3 tests. validateAllSessions (Promise.allSettled), printValidationSummary. Uses validateSession from sessionValidator.ts."
+
+  - id: 6
+    title: "Product Monitoring & Auto-Trigger"
+    stories:
+      - id: "6-1"
+        title: "SDK Integration for Product Feed Polling"
+        file: stories/6-1-sdk-polling-integration.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): SDK polling integration with AbortSignal clean stop — story 6-1"
+        notes: "4/4 tests. fetchProductStatus (full feed + slug filter), extractAvailableSizes (HIGH/LOW/MEDIUM), startPolling with AbortSignal and error recovery."
+      - id: "6-2"
+        title: "Stock Transition Detection for Target Sizes"
+        file: stories/6-2-stock-transition-detection.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): stock transition detection OOS→in-stock — story 6-2"
+        notes: "8/8 tests. StockTracker class. Invariant: first poll never returns became_available. Detects became_available, became_unavailable, still_available, still_unavailable."
+      - id: "6-3"
+        title: "Auto-Trigger Checkout on Availability"
+        file: stories/6-3-auto-trigger-checkout.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): auto-trigger checkout on stock detection — story 6-3"
+        notes: "3/3 tests. startMonitorAndCheckout accepts AbortController. validateAllSessions first, throws if none valid. checkoutTriggered guard prevents races."
+      - id: "6-4"
+        title: "CLI Start Command with Monitoring"
+        file: stories/6-4-cli-start-command.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): CLI start command with monitoring, SIGINT, and dry-run — story 6-4"
+        notes: "4/4 tests. --slug, --sizes, --url required. --daemon, --dry-run, --no-auto-checkout optional. setupGracefulShutdown used for SIGINT/SIGTERM."
+
+  - id: 7
+    title: "Daemon Mode & Operations"
+    stories:
+      - id: "7-1"
+        title: "Headless Daemon Mode"
+        file: stories/7-1-daemon-mode.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): daemon mode with PID file and stop command — story 7-1"
+        notes: "3/3 tests. isDaemonRunning, daemonize, writePidFile, removePidFile. stop command added to CLI. bot.pid already in .gitignore."
+      - id: "7-2"
+        title: "Bot Status Command"
+        file: stories/7-2-bot-status-command.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): bot status command with uptime and accounts — story 7-2"
+        notes: "4/4 tests. formatUptime (d/h/m/s), getBotStatus (async, validateAllSessions), printBotStatus. status command integrated in CLI."
+      - id: "7-3"
+        title: "Graceful Shutdown Handling"
+        file: stories/7-3-graceful-shutdown.md
+        status: done
+        completed_at: "2026-04-04"
+        branch: epic/bot-package
+        commit: "feat(bot): graceful shutdown SIGTERM/SIGINT with Playwright context close — story 7-3"
+        notes: "2/2 tests. registerContext/unregisterContext, setupGracefulShutdown. Promise.allSettled for context close, 10s per-context timeout. Integrated into checkoutPipeline (finally block) and CLI start command."
+
+  - id: 8
+    title: "Live Kasada Bypass & Real Chrome Integration"
+    stories:
+      - id: "8-1"
+        title: "Real Chrome via CDP Infrastructure"
+        file: stories/8-1-real-chrome-cdp.md
+        status: done
+        completed_at: "2026-04-05"
+        branch: epic/bot-package
+        commit: "feat(bot): real Chrome via CDP to bypass Kasada — fixes automation detection"
+        notes: "launchRealChrome spawns system Chrome with --remote-debugging-port, Playwright connects via connectOverCDP AFTER launch (no injection at launch time). Per-account persistent profile in ~/.nike-bot/profiles/{accountId}. DOM-nuker for cookie modal via MutationObserver. Extension loading from ~/.nike-bot/extensions/."
+
+      - id: "8-2"
+        title: "Session Snapshot + OAuth Handshake"
+        file: stories/8-2-session-snapshot-oauth.md
+        status: done
+        completed_at: "2026-04-05"
+        branch: epic/bot-package
+        commit: "feat(bot): OAuth handshake automation + session snapshot persistence"
+        notes: "captureFullSession captures cookies + localStorage + sessionStorage from www.nike.com AND accounts.nike.com. completeOAuthHandshake triggers /fr/member redirect, clicks 'Continue as {user}' on accounts.nike.com/continue, polls localStorage for oidc.* to confirm access_token set. waitForNikeAuthCookie auto-detects sid arrival (no manual ENTER). Waits for URL to settle away from /auth/login?code=XXX intermediate state."
+
+      - id: "8-3"
+        title: "naturalClick — Kasada Click Interceptor Bypass"
+        file: stories/8-3-natural-click-bypass.md
+        status: done
+        completed_at: "2026-04-05"
+        branch: epic/bot-package
+        commit: "feat(bot): naturalClick bypass for Kasada click interceptor"
+        notes: "Nike injects window-level capture-phase click listener that preventDefault+stopPropagation on programmatic mouse events. Solution: bezier curve mouse movement (realism) + element.click() via evaluate (bypasses window interceptor by calling onClick directly). All 6 checkout step files updated."
+
+      - id: "8-4"
+        title: "capture-session CLI Command"
+        file: stories/8-4-capture-session-cli.md
+        status: done
+        completed_at: "2026-04-05"
+        branch: epic/bot-package
+        commit: "feat(bot): integrate real Chrome + session snapshot into checkout pipeline"
+        notes: "Opens visible Chrome with persistent profile, auto-detects sid cookie, captures full session, persists snapshot. No manual ENTER needed — polls for sid arrival."
+
+      - id: "8-5"
+        title: "Integrate Real Chrome in Checkout Pipeline"
+        file: stories/8-5-real-chrome-pipeline.md
+        status: done
+        completed_at: "2026-04-05"
+        branch: epic/bot-package
+        commit: "feat(bot): integrate real Chrome + session snapshot into checkout pipeline"
+        notes: "checkoutPipeline uses createRealCheckoutContext (headless:false required — Kasada blocks headless at accounts.nike.com). navigateCheckout now navigates to /fr/cart first (PDP has no checkout button). Selectors updated: /fr/checkout (not /checkout/tunnel), new data-testid scheme, text-based checkout selectors."
+
+      - id: "8-6"
+        title: "Complete Shipping Step (aria-disabled handling)"
+        file: stories/8-6-complete-shipping-aria-disabled.md
+        status: ready_for_dev
+        notes: "BLOCKER: the 'Enregistrer et continuer' button has aria-disabled=true by default. Nike requires explicit shipping method selection (radio or delivery option click) to enable it. Need to: (1) inspect Nike's shipping form with a logged-in account; (2) identify the selector(s) that must be clicked; (3) chain them in completeShipping step; (4) verify button becomes enabled then click."
+
+      - id: "8-7"
+        title: "Complete Payment Step Verification"
+        file: stories/8-7-complete-payment-verify.md
+        status: ready_for_dev
+        notes: "Payment selectors are placeholders. Need live inspection of Nike FR payment page with a logged-in account to: (1) identify the pre-saved card selection UI; (2) find the Continuer button on payment step; (3) verify the 3DS iframe selector against real Visa/Mastercard/CB 3DS flows."
+
+      - id: "8-8"
+        title: "Submit Order Step Verification"
+        file: stories/8-8-submit-order-verify.md
+        status: ready_for_dev
+        notes: "Order submit button is placeholder ('Passer la commande'|'Acheter'). Need live confirmation of the button text/selector on the order-review step AND the order confirmation page selector (h1:has-text('Commande confirmée') assumed)."
+
+      - id: "8-9"
+        title: "capture-session Auto-Registers Account"
+        file: stories/8-9-capture-session-register-account.md
+        status: ready_for_dev
+        notes: "Today capture-session persists a snapshot but does NOT create an entry in .bot-data/accounts.json — so dry-run/start/checkout CLI commands fail with 'Account not found'. Need to make capture-session write a minimal account entry (id, email, placeholder password/proxy, country=FR) derived from the Nike profile after login."
+
+  - id: 9
+    title: "Distribution & Onboarding Non-Dev [v2]"
+    stories:
+      - id: "9-1"
+        title: "Interactive Wizard nike-bot init"
+        file: stories/9-1-wizard-init.md
+        status: backlog
+      - id: "9-2"
+        title: "SEA Binary Packaging macOS/Windows [v1.1]"
+        file: stories/9-2-sea-binary-packaging.md
+        status: backlog
+      - id: "9-3"
+        title: "Auto-Installer Playwright + Chromium [v1.1]"
+        file: stories/9-3-auto-installer-browsers.md
+        status: backlog
+      - id: "9-4"
+        title: "One-Line Install Script"
+        file: stories/9-4-install-script.md
+        status: backlog
+      - id: "9-5"
+        title: "FIRST_LAUNCH.md Gatekeeper/SmartScreen Docs"
+        file: stories/9-5-first-launch-docs.md
+        status: backlog
+      - id: "9-6"
+        title: "Auto-Generate CSV Templates"
+        file: stories/9-6-csv-templates.md
+        status: backlog
+
+  - id: 10
+    title: "CSV-First Config System [v2]"
+    stories:
+      - id: "10-1"
+        title: "accounts.csv Parser and Validator"
+        file: stories/10-1-accounts-csv-parser.md
+        status: backlog
+      - id: "10-2"
+        title: "cards.csv Parser + SQLite AES-256"
+        file: stories/10-2-cards-csv-encrypted.md
+        status: backlog
+      - id: "10-3"
+        title: "addresses.csv Parser + Join account_id"
+        file: stories/10-3-addresses-csv-parser.md
+        status: backlog
+      - id: "10-4"
+        title: "drop.csv Parser + accounts_filter Semantics"
+        file: stories/10-4-drop-csv-parser.md
+        status: backlog
+      - id: "10-5"
+        title: "report.csv Generator Post-Drop"
+        file: stories/10-5-report-csv-generator.md
+        status: backlog
+
+  - id: 11
+    title: "TUI Dashboard Live [v2]"
+    stories:
+      - id: "11-1"
+        title: "Ink TUI Dashboard Multi-Account Live"
+        file: stories/11-1-ink-dashboard-live.md
+        status: backlog
+      - id: "11-2"
+        title: "Emojis + Animations + Progress Bars"
+        file: stories/11-2-tui-animations-polish.md
+        status: backlog
+      - id: "11-3"
+        title: "Pre-Drop Warmup Mode with Countdown"
+        file: stories/11-3-pre-drop-warmup.md
+        status: backlog
+      - id: "11-4"
+        title: "Final Summary Screen + Auto-Save Report"
+        file: stories/11-4-final-summary-screen.md
+        status: backlog
+      - id: "11-5"
+        title: "Retry Failed Accounts Action"
+        file: stories/11-5-retry-failed-accounts.md
+        status: backlog
+
+summary:
+  total: 62
+  done: 42
+  in_progress: 0
+  ready_for_dev: 4
+  backlog: 16
+  v2_epics: [9, 10, 11]
+
+# v3 archive batch (2026-04-25)
+v3Archive:
+  date: '2026-04-25'
+  archivedStories:
+    - 4-2-add-to-cart
+    - 4-3-navigate-checkout
+    - 4-4-complete-shipping
+    - 4-5-complete-payment
+    - 4-6-submit-order
+    - 7-1-headless-daemon-mode
+    - 7-2-bot-status-command
+    - 7-3-graceful-shutdown
+  reason: 'Superseded by v3 API-first SaaS architecture (Epics 12, 15, 17)'
+  newEpicsAdded: [12, 13, 14, 15, 16, 17, 18]
