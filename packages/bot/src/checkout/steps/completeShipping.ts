@@ -77,6 +77,7 @@ export async function completeShipping(
 			])
 
 			const address1Loc = await findFirstVisible(page, [
+				'input[name="address.address1"]',
 				'input[name="address1"]',
 				'input[name="addressLine1"]',
 				'input[aria-label*="dresse"]',

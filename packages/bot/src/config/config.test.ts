@@ -13,19 +13,34 @@ describe('loadBotConfig', () => {
 	})
 
 	it('returns default values when config file does not exist', async () => {
-		const config = await loadBotConfig()
-		assert.equal(config.polling.interval, 5000)
-		assert.equal(config.polling.timeout, 30000)
-		assert.equal(config.checkout.market, 'FR')
-		assert.equal(config.checkout.language, 'fr')
-		assert.equal(config.checkout.currency, 'EUR')
-		assert.deepEqual(config.checkout.defaultSizes, [])
-		assert.equal(config.proxy.rotationMode, 'per-account')
-		assert.equal(config.proxy.testOnImport, true)
-		assert.equal(config.stealth.headless, true)
-		assert.equal(config.stealth.userAgent, 'auto')
-		assert.equal(config.daemon.logFile, './logs/bot.log')
-		assert.equal(config.daemon.pidFile, './bot.pid')
+		// Run from a tmp dir so we test the default-path-missing branch
+		// regardless of any bot.config.yaml that may exist in the test cwd.
+		const originalCwd = process.cwd()
+		const tmpDir = await import('node:fs/promises').then((fs) =>
+			fs.mkdtemp('/tmp/loadBotConfig-default-'),
+		)
+		process.chdir(tmpDir)
+		try {
+			const config = await loadBotConfig()
+			assert.equal(config.polling.interval, 5000)
+			assert.equal(config.polling.timeout, 30000)
+			assert.equal(config.checkout.market, 'FR')
+			assert.equal(config.checkout.language, 'fr')
+			assert.equal(config.checkout.currency, 'EUR')
+			assert.deepEqual(config.checkout.defaultSizes, [])
+			assert.equal(config.proxy.rotationMode, 'per-account')
+			assert.equal(config.proxy.testOnImport, true)
+			assert.equal(config.stealth.headless, true)
+			assert.equal(config.stealth.userAgent, 'auto')
+			assert.equal(config.daemon.logFile, './logs/bot.log')
+			assert.equal(config.daemon.pidFile, './bot.pid')
+			return
+		} finally {
+			process.chdir(originalCwd)
+			await import('node:fs/promises').then((fs) =>
+				fs.rm(tmpDir, { recursive: true, force: true }),
+			)
+		}
 	})
 
 	it('loads and parses a valid full YAML config file', async () => {

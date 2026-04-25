@@ -57,6 +57,10 @@ function makePage(locators: Record<string, FakeLocator>): { page: unknown } {
 			async move(): Promise<void> { /* noop */ },
 			async wheel(): Promise<void> { /* noop */ },
 		},
+		keyboard: {
+			async press(): Promise<void> { /* noop */ },
+			async type(): Promise<void> { /* noop */ },
+		},
 		frameLocator(sel: string) {
 			return {
 				locator(s: string) {
@@ -98,11 +102,11 @@ test('completeShipping: fills empty form using opts.address', async () => {
 
 	const { page } = makePage({
 		'button.shipping-continue': continueBtn,
-		'input[name="address1"]': address1,
-		'input[name="city"]': city,
-		'input[name="postalCode"]': zip,
-		'input[name="country"]': country,
-		'input[name="phoneNumber"]': phone,
+		'input[name="address.address1"]': address1,
+		'input[name="address.city"]': city,
+		'input[name="address.postalCode"]': zip,
+		'input[name="address.country"]': country,
+		'input[name="address.phoneNumber"]': phone,
 	})
 
 	const result = await completeShipping(page as never, selectors, {
@@ -121,7 +125,8 @@ test('completeShipping: fills empty form using opts.address', async () => {
 	assert.deepEqual(address1.fillCalls, ['42 Rue de la Paix'])
 	assert.deepEqual(city.fillCalls, ['Paris'])
 	assert.deepEqual(zip.fillCalls, ['75002'])
-	assert.deepEqual(country.fillCalls, ['FR'])
+	// country is intentionally skipped (readonly select on Nike)
+	assert.deepEqual(country.fillCalls, [])
 	assert.deepEqual(phone.fillCalls, ['+33612345678'])
 	assert.equal(continueBtn.clickCalls, 1)
 })
