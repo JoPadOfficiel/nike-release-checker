@@ -1,5 +1,5 @@
 import { launchRealChrome, type RealChromeHandle } from './realChrome.ts'
-import { loadSessionSnapshot, injectSessionSnapshot, completeOAuthHandshake } from '../auth/captureSession.ts'
+import { loadSessionSnapshot, injectSessionSnapshot } from '../auth/captureSession.ts'
 
 export interface RealCheckoutContextOptions {
   accountId: string
@@ -67,21 +67,32 @@ export async function createRealCheckoutContext(
       }
     }
 
-    // Complete OAuth handshake to make www.nike.com set its access_token.
-    // Only needed if we JUST injected a snapshot, or if the profile has never
-    // completed the handshake before.
+    // Fast cookie-presence check INSTEAD of navigating to /fr/member for the full
+    // OAuth handshake. The cookies (sid, oidc.*) injected from the snapshot are
+    // sufficient for nike.com SPA auth on PDPs/cart — and `selectSize.ts`'s own
+    // goto + assertNotBlocked will catch any auth issues. This skips 3-5s of
+    // navigation overhead per checkout.
     if (injectedSnapshot) {
       const page = handle.context.pages()[0] ?? (await handle.context.newPage())
-      const authOk = await completeOAuthHandshake(page)
-      console.log(`  [auth] handshake returned: ${authOk}, page URL: ${page.url()}`)
-      const verify = await page.evaluate(() => ({
-        oidc: Object.keys(localStorage).filter((k) => k.startsWith('oidc.')).length,
-        origin: window.location.origin,
-      }))
-      console.log(`  [auth] localStorage check: origin=${verify.origin}, oidc=${verify.oidc}`)
-      if (!authOk) {
-        console.warn(`  [auth] OAuth handshake failed for ${accountId} — session may be expired. Re-run capture-session.`)
+      const cookies = await page.context().cookies('https://www.nike.com')
+      const hasSid = cookies.some((c) => c.name === 'sid')
+      const hasOidc = cookies.some((c) => c.name.startsWith('oidc.'))
+      console.log(`  [auth] cookie check: sid=${hasSid}, oidc=${hasOidc}`)
+      if (!hasSid) {
+        throw new Error(`Session snapshot missing for account '${accountId}'. Run 'nike-bot capture-session --account ${accountId}' to refresh.`)
       }
+      // Fallback (original full OAuth handshake) — kept for reference if cookie
+      // check turns out to be insufficient on some flows:
+      // const authOk = await completeOAuthHandshake(page)
+      // console.log(`  [auth] handshake returned: ${authOk}, page URL: ${page.url()}`)
+      // const verify = await page.evaluate(() => ({
+      //   oidc: Object.keys(localStorage).filter((k) => k.startsWith('oidc.')).length,
+      //   origin: window.location.origin,
+      // }))
+      // console.log(`  [auth] localStorage check: origin=${verify.origin}, oidc=${verify.oidc}`)
+      // if (!authOk) {
+      //   console.warn(`  [auth] OAuth handshake failed for ${accountId} — session may be expired. Re-run capture-session.`)
+      // }
     }
 
     return handle

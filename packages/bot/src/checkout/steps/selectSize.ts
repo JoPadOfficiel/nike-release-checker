@@ -29,10 +29,13 @@ export async function selectSize(
       // Use a shorter timeout for goto so subsequent operations still have time
       // within the executeStep race timer
       const gotoTimeout = Math.max(Math.floor(timeoutMs * 0.5), 2000)
-      const response = await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: gotoTimeout })
+      const response = await page.goto(productUrl, { waitUntil: 'load', timeout: gotoTimeout })
       await assertNotBlocked(page, response, selectors)
       // Dismiss Nike's cookie consent modal if it appears — otherwise it blocks clicks.
       await dismissCookieConsent(page, selectors, 800)
+      // Trigger lazy hydration of size grid (often below initial viewport on Nike PDPs)
+      await page.evaluate(() => window.scrollTo(0, 800)).catch(() => {})
+      await page.waitForTimeout(300)
       const selectorTimeout = Math.max(Math.floor(timeoutMs * 0.4), 2000)
       await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: selectorTimeout })
 
