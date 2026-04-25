@@ -618,3 +618,165 @@ program
 			process.exit(1)
 		}
 	})
+
+program
+	.command('run')
+	.description('Execute drops from drop.csv with live TUI dashboard')
+	.option('--drops <path>', 'Path to drop.csv', './drop.csv')
+	.option('--accounts-csv <path>', 'Path to accounts.csv', './accounts.csv')
+	.option('--selectors <path>', 'Path to selectors YAML', './selectors.yaml')
+	.option('--dry-run', 'Run pipeline without submitting orders', false)
+	.action(
+		async (opts: {
+			drops: string
+			accountsCsv: string
+			selectors: string
+			dryRun?: boolean
+		}) => {
+			const { maskCredentials } = await import('../logger/credentialMasker.ts')
+			const { parseAccountsCsv } = await import('../config/accountsCsv.ts')
+			const { parseDropCsv, resolveAccountsFilter } = await import(
+				'../config/dropCsv.ts'
+			)
+			const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+			const { loadBotConfig } = await import('../config/botConfig.ts')
+			const { resolveSkuToSlug } = await import('../monitor/poller.ts')
+			const { runParallelCheckout } = await import(
+				'../checkout/parallelCheckout.ts'
+			)
+			const { toCheckoutResult } = await import(
+				'../checkout/checkoutResultAdapter.ts'
+			)
+			const { default: React } = await import('react')
+			const { render } = await import('ink')
+			const { Dashboard } = await import('../tui/Dashboard.tsx')
+			const { SummaryScreen } = await import('../tui/SummaryScreen.tsx')
+
+			const configPath = program.opts<{ config: string }>().config
+			const dryRun = opts.dryRun ?? false
+
+			try {
+				// 1. Parse accounts.csv → accounts (CSV row form)
+				const accountsParse = await parseAccountsCsv(opts.accountsCsv)
+				if (accountsParse.errors.length > 0) {
+					console.error(
+						`❌ accounts.csv has ${accountsParse.errors.length} error(s):`,
+					)
+					for (const e of accountsParse.errors) {
+						console.error(
+							`  row ${e.row} [${e.column}]: ${e.message}${e.suggestion ? ` (${e.suggestion})` : ''}`,
+						)
+					}
+					process.exit(1)
+				}
+				const csvAccountIds = new Set(
+					accountsParse.accounts.map((a) => a.account_id),
+				)
+
+				// 2. Parse drop.csv against the known account-id set
+				const dropParse = await parseDropCsv(opts.drops, csvAccountIds)
+				if (dropParse.errors.length > 0) {
+					console.error(`❌ drop.csv has ${dropParse.errors.length} error(s):`)
+					for (const e of dropParse.errors) {
+						console.error(`  row ${e.row} [${e.column}]: ${e.message}`)
+					}
+					process.exit(1)
+				}
+				for (const w of dropParse.warnings) {
+					console.warn(`⚠️  drop.csv row ${w.row} [${w.column}]: ${w.message}`)
+				}
+
+				// 3. Stored accounts (already imported via `nike-bot import-accounts`)
+				const stored = await loadStoredAccounts()
+				const storedById = new Map(stored.map((a) => [a.id, a]))
+				const allIds = stored.map((a) => a.id)
+				// Pragmatic v1: trust stored accounts as having sessions. Per-account
+				// session validation can be wired in once warmup mode is integrated.
+				const validSessionIds = new Set(allIds)
+
+				const config = await loadBotConfig(configPath)
+
+				// 4. For each drop row → run pipeline + render Dashboard live
+				for (const drop of dropParse.drops) {
+					const accountIds = resolveAccountsFilter(
+						drop.accounts_filter,
+						allIds,
+						validSessionIds,
+					)
+					if (accountIds.length === 0) {
+						console.log(
+							`[run] Skipping ${drop.sku} — no accounts after filter / session check.`,
+						)
+						continue
+					}
+					const accounts = accountIds
+						.map((id) => storedById.get(id))
+						.filter((a): a is NonNullable<typeof a> => a !== undefined)
+
+					console.log(
+						`[run] ${drop.sku} — resolving SKU → slug (${accounts.length} account(s))`,
+					)
+					const controller = new AbortController()
+					const skuResolved = await resolveSkuToSlug(
+						drop.sku,
+						config,
+						controller.signal,
+						3000,
+					)
+					console.log(`[run] ${drop.sku} → ${skuResolved.productUrl}`)
+
+					// Mount the Dashboard. parallelCheckout already emits to globalBus;
+					// the Dashboard subscribes and renders live row-by-row updates.
+					const dashboardApp = render(
+						React.createElement(Dashboard, {
+							sku: drop.sku,
+							sizes: drop.sizes,
+							accountIds: accounts.map((a) => a.id),
+							onFinished: () => {
+								/* noop — we drive the lifecycle from the parallel run below */
+							},
+						}),
+					)
+
+					let summary
+					try {
+						summary = await runParallelCheckout({
+							productUrl: skuResolved.productUrl,
+							targetSizes: drop.sizes,
+							dryRun,
+							configPath,
+							selectorsPath: opts.selectors,
+							accounts,
+						})
+					} finally {
+						dashboardApp.unmount()
+						await dashboardApp.waitUntilExit().catch(() => undefined)
+					}
+
+					// 5. Adapt → flat CheckoutResult[] for SummaryScreen + auto report write.
+					const results = summary.results.map((p) =>
+						toCheckoutResult(p, drop.sku),
+					)
+
+					const summaryApp = render(
+						React.createElement(SummaryScreen, {
+							results,
+							// TODO: wire to retryController + RetrySelection screen.
+							// Pragmatic v1: retry is deferred — onRetry is a no-op so the
+							// summary still renders the [R] hint without acting on it.
+							onRetry: () => {
+								/* TODO: integrate RetryController + RetrySelection */
+							},
+						}),
+					)
+					await summaryApp.waitUntilExit()
+				}
+
+				// TODO: integrate WarmupController for scheduled drops (T-5:00 lead)
+				// — for v1 we run drops as soon as the SKU resolves on the feed.
+			} catch (err) {
+				console.error(`❌ Run failed: ${maskCredentials(String(err))}`)
+				process.exit(1)
+			}
+		},
+	)

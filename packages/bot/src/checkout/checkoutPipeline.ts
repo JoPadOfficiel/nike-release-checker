@@ -1,7 +1,9 @@
+import type { BrowserContext, Page } from 'playwright'
 import type { BotConfig } from '../config/botConfigSchema.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import type { Selectors } from '../config/selectorSchema.ts'
 import { createRealCheckoutContext } from '../stealth/realCheckoutContext.ts'
+import type { RealChromeHandle } from '../stealth/realChrome.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
 import { logStep } from '../logger/logger.ts'
 import { printStepResult } from '../logger/terminal.ts'
@@ -31,6 +33,54 @@ export interface CheckoutPipelineOptions {
   dryRun?: boolean
 }
 
+/**
+ * Handle returned by `createCheckoutContext` — pairs the underlying real-Chrome
+ * BrowserContext with the first usable Page, plus a `close()` to tear it down.
+ *
+ * Exposed so callers (e.g. WarmupController) can pre-launch contexts ahead of a
+ * drop and then hand them to the checkout pipeline at T=0 with zero cold-start.
+ */
+export interface CheckoutContextHandle {
+  context: BrowserContext
+  page: Page
+  close: () => Promise<void>
+}
+
+/**
+ * Launch a real Chrome process for one account and return the prepared
+ * BrowserContext + initial Page. Identical to the inline launch used at the top
+ * of `runCheckoutPipeline`, just hoisted so it can be called independently
+ * (warmup phase, integration tests, future parallel pre-launch, …).
+ *
+ * Callers MUST invoke `handle.close()` in a `finally` block — the BrowserContext
+ * holds a Chrome subprocess.
+ */
+export async function createCheckoutContext(
+  account: AccountConfig,
+): Promise<CheckoutContextHandle> {
+  const handle = await createRealCheckoutContext({
+    accountId: account.id,
+    headless: false, // Visible browser — Kasada blocks headless Chrome at accounts.nike.com
+  })
+  const page = handle.context.pages()[0] ?? (await handle.context.newPage())
+  return {
+    context: handle.context,
+    page,
+    close: handle.close,
+  }
+}
+
+// Internal: keep the launch wrapped so `runCheckoutPipeline` can reuse the
+// helper without changing its existing no-session error semantics.
+async function safeCreateRealCheckoutContext(
+  account: AccountConfig,
+): Promise<RealChromeHandle> {
+  return createRealCheckoutContext({
+    accountId: account.id,
+    headless: false,
+  })
+}
+
 export async function runCheckoutPipeline(
   account: AccountConfig,
   config: BotConfig,
@@ -47,12 +97,9 @@ export async function runCheckoutPipeline(
   // Use real Chrome via CDP — bypasses Kasada's Playwright-launch detection.
   // This spawns Chrome as an independent process with a per-account persistent
   // profile, injects session snapshot, and completes OAuth handshake.
-  let handle: Awaited<ReturnType<typeof createRealCheckoutContext>>
+  let handle: RealChromeHandle
   try {
-    handle = await createRealCheckoutContext({
-      accountId: account.id,
-      headless: false,  // Visible browser — Kasada blocks headless Chrome at accounts.nike.com
-    })
+    handle = await safeCreateRealCheckoutContext(account)
   } catch (err) {
     if (err instanceof Error && err.message.includes('Session snapshot missing')) {
       console.log(`  No session for ${maskedEmail} — skipping. Run: nike-bot capture-session --account ${account.id}`)

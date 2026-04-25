@@ -1,6 +1,10 @@
 import { EventEmitter } from 'node:events'
 import { resolveSkuToSlug, type SkuResolveResult } from './poller.ts'
 import { validateSession } from '../auth/sessionValidator.ts'
+import {
+	createCheckoutContext,
+	type CheckoutContextHandle,
+} from '../checkout/checkoutPipeline.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import type { BotConfig } from '../config/botConfigSchema.ts'
 
@@ -28,10 +32,17 @@ export interface WarmupProgress {
 	contextsReady?: number
 }
 
+/**
+ * Pre-launched checkout context produced during the `contexts` phase.
+ * Tests substitute a plain object (`{}`); production stores a real
+ * `CheckoutContextHandle` with a live BrowserContext + Page.
+ */
+export type PreparedCheckoutContext = CheckoutContextHandle | unknown
+
 export interface WarmupResult {
 	slug: string
 	validAccounts: AccountConfig[]
-	contexts: Map<string, unknown>
+	contexts: Map<string, PreparedCheckoutContext>
 }
 
 export interface WarmupStartOptions {
@@ -54,8 +65,7 @@ export interface WarmupDeps {
 		pollIntervalMs: number,
 	) => Promise<SkuResolveResult>
 	validateSessionStatus: (accountId: string) => Promise<boolean>
-	// TODO: wire to checkoutPipeline.createContext when exposed.
-	createCheckoutContext: (account: AccountConfig) => Promise<unknown>
+	createCheckoutContext: (account: AccountConfig) => Promise<PreparedCheckoutContext>
 	sleep: (ms: number, signal: AbortSignal) => Promise<void>
 }
 
@@ -66,10 +76,7 @@ const defaultDeps: WarmupDeps = {
 		const r = await validateSession(accountId)
 		return r.status === 'valid'
 	},
-	// Stub until checkoutPipeline exposes a context-only helper.
-	// For now, emit progress for the phase pattern without really launching a browser.
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	createCheckoutContext: async (_account) => ({}),
+	createCheckoutContext: (account) => createCheckoutContext(account),
 	sleep: (ms, signal) =>
 		new Promise<void>((resolve) => {
 			if (signal.aborted) {
@@ -103,7 +110,7 @@ export function __resetWarmupDeps(): void {
 export class WarmupController {
 	private ee = new EventEmitter()
 	private abort = new AbortController()
-	private contexts = new Map<string, unknown>()
+	private contexts = new Map<string, PreparedCheckoutContext>()
 	private deps: WarmupDeps
 
 	constructor(deps?: Partial<WarmupDeps>) {
