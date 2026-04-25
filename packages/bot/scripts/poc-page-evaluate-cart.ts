@@ -47,7 +47,7 @@ function summarise(label: string, result: { status: number; headers: Record<stri
 
 async function main() {
 	console.log(`[POC] Launching real Chrome for account: ${ACCOUNT_ID}`)
-	const handle = await createRealCheckoutContext({ accountId: ACCOUNT_ID, headless: true })
+	const handle = await createRealCheckoutContext({ accountId: ACCOUNT_ID, headless: false })
 
 	const outgoing: Record<string, Record<string, string>> = {}
 

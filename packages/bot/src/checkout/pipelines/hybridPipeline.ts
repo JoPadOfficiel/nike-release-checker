@@ -23,6 +23,8 @@ import { selectSize } from '../steps/selectSize.ts'
 import { handle3DSIfRequired } from '../steps/handle3DS.ts'
 import { harvestSkuId } from '../dom/harvestSkuId.ts'
 import { mapErrorToOutcome } from '../mapErrorToOutcome.ts'
+import { RealKpsdkClient } from '../../stealth/kpsdk/protectedFetch.ts'
+import { kpsdkCacheHolder } from '../../stealth/kpsdk/cache.ts'
 import {
 	NikeCartApi,
 	NikeCartViewsApi,
@@ -110,10 +112,28 @@ export async function runHybridPipeline(
 		error: (msg: string, meta: object) => console.error(`[hybrid] ${msg}`, meta),
 	}
 
-	// Stub KPSDK client and session refresh for retry context.
-	// Real KPSDK client (Epic 14) will replace these stubs.
-	const kpsdkClient = { refresh: async (_p: Page): Promise<void> => { /* stub */ } }
-	const sessionRefresh = async (): Promise<void> => { /* stub */ }
+	// Real KPSDK client (Epic 14.3) — invalidates cache + reloads page + force-fires
+	// a fresh KPSDK extract. Wired here per code review finding H2.
+	const kpsdkClient = new RealKpsdkClient(
+		kpsdkCacheHolder.instance,
+		account.id,
+		country,
+	)
+	// Session refresh: re-runs the OIDC bootstrap by re-navigating to a Nike page
+	// that triggers the auth handshake. Best-effort — if the snapshot is dead the
+	// caller will get a SessionExpiredError from getBearerToken on next call.
+	const sessionRefresh = async (): Promise<void> => {
+		try {
+			await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 })
+			await page.waitForFunction(
+				() =>
+					Object.keys(localStorage).some((k) => k.startsWith('oidc.user:')),
+				{ timeout: 10000 },
+			)
+		} catch {
+			// best-effort; the next API call will surface SessionExpiredError
+		}
+	}
 
 	const retryBase = { page, kpsdkClient, sessionRefresh, logger }
 

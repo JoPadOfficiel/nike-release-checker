@@ -45,7 +45,7 @@ describe('NikeCartApi (live)', { skip: !LIVE }, () => {
 
 		const handle = await createRealCheckoutContext({
 			accountId,
-			headless: true,
+			headless: false,
 		})
 		try {
 			const page =

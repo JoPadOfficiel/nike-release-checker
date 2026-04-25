@@ -36,7 +36,7 @@ const makeConfig = (pipeline: 'dom' | 'hybrid' = 'hybrid'): BotConfig => ({
 		pipeline,
 	},
 	proxy: { rotationMode: 'per-account', testOnImport: true },
-	stealth: { headless: true, userAgent: 'auto' },
+	stealth: { headless: false, userAgent: 'auto' },
 	daemon: { logFile: './logs/bot.log', pidFile: './bot.pid' },
 	kpsdk: { tokenTtlMs: 600_000 },
 })

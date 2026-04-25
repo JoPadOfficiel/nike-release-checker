@@ -50,7 +50,7 @@ export const errorToBlockReason = (e: unknown): BlockReason => {
 
 	// --- Review (Story 12.6) ---
 	if (e instanceof TotalMismatchError) return 'total_mismatch'
-	if (e instanceof ReviewTimeoutError) return 'view_timeout'
+	if (e instanceof ReviewTimeoutError) return 'review_timeout'
 	if (e instanceof ReviewError) return 'review_failed'
 
 	// --- SKU resolver (Story 12.2 / 12.7) ---
