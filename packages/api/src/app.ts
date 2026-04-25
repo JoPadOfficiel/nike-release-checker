@@ -10,6 +10,8 @@ import { dropsRoutes } from './routes/drops/index.ts'
 import { healthRoute } from './routes/health.ts'
 import { accountRoutes } from './routes/account/index.ts'
 import { webhooksRoutes } from './routes/webhooks/index.ts'
+import { createDropScheduler } from './scheduler/dropScheduler.ts'
+import { NoopWorkerPoolClient } from './scheduler/workerPoolClient.ts'
 
 export async function buildApp() {
 	const app = Fastify({
@@ -72,6 +74,15 @@ export async function buildApp() {
 	await app.register(webhooksRoutes)
 	await app.register(dropsRoutes)
 	await app.register(accountRoutes)
+
+	// Scheduler lifecycle — start on ready, stop on close
+	const scheduler = createDropScheduler({ workerPool: new NoopWorkerPoolClient() })
+	app.addHook('onReady', async () => {
+		await scheduler.start()
+	})
+	app.addHook('onClose', async () => {
+		await scheduler.stop()
+	})
 
 	return app
 }

@@ -99,6 +99,34 @@ export const dropsDb = {
     return updated
   },
 
+  /**
+   * Count drops in ACTIVE state for a given customer.
+   * Used by the scheduler concurrency cap check.
+   */
+  countActive(customerId: string): number {
+    let count = 0
+    for (const row of dropsStore.values()) {
+      if (row.customer_id === customerId && row.state === 'ACTIVE') {
+        count++
+      }
+    }
+    return count
+  },
+
+  /**
+   * Return all drops matching given states, ordered by scheduled_at ASC.
+   * Used by the scheduler polling loop.
+   */
+  findByStates(states: DropState[]): DropRow[] {
+    return [...dropsStore.values()]
+      .filter((r) => states.includes(r.state))
+      .sort((a, b) => {
+        const ta = a.scheduled_at ?? a.created_at
+        const tb = b.scheduled_at ?? b.created_at
+        return ta.localeCompare(tb)
+      })
+  },
+
   listOrders(
     dropId: string,
     customerId: string,

@@ -63,13 +63,13 @@ describe('Migration 16.1 — schema tests', () => {
     client = await freshMigratedClient()
   })
 
-  it('schema_migrations tracks all 4 files after runUp', async () => {
+  it('schema_migrations tracks all 5 files after runUp', async () => {
     const res = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 4)
+    assert.equal(res.rows.length, 5)
     assert.equal(res.rows[0]!.version, '0001_customers_and_api_keys.sql')
-    assert.equal(res.rows[3]!.version, '0004_webhooks_and_audit.sql')
+    assert.equal(res.rows[4]!.version, '0005_customer_dek_salt.sql')
   })
 
   it('runUp is idempotent — second call is a no-op (no error, same row count)', async () => {
@@ -77,13 +77,13 @@ describe('Migration 16.1 — schema tests', () => {
     const res = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 4)
+    assert.equal(res.rows.length, 5)
   })
 
   it('CASCADE: deleting a customer removes api_keys, drops, webhooks', async () => {
     // Insert customer
     const custRes = await client.query<{ id: string }>(
-      `INSERT INTO customers(email, dek_wrapped) VALUES('cascade-test@example.com', '\\x') RETURNING id`,
+      `INSERT INTO customers(email, dek_wrapped, dek_salt) VALUES('cascade-test@example.com', '\\x', '\\x') RETURNING id`,
     )
     const customerId = custRes.rows[0]!.id
 
@@ -144,10 +144,10 @@ describe('Migration 16.1 — schema tests', () => {
 
   it('Cross-tenant isolation: customer B rows NOT visible to customer A query', async () => {
     const rA = await client.query<{ id: string }>(
-      `INSERT INTO customers(email, dek_wrapped) VALUES('tenant-a@example.com', '\\x') RETURNING id`,
+      `INSERT INTO customers(email, dek_wrapped, dek_salt) VALUES('tenant-a@example.com', '\\x', '\\x') RETURNING id`,
     )
     const rB = await client.query<{ id: string }>(
-      `INSERT INTO customers(email, dek_wrapped) VALUES('tenant-b@example.com', '\\x') RETURNING id`,
+      `INSERT INTO customers(email, dek_wrapped, dek_salt) VALUES('tenant-b@example.com', '\\x', '\\x') RETURNING id`,
     )
     const idA = rA.rows[0]!.id
     const idB = rB.rows[0]!.id
@@ -168,7 +168,7 @@ describe('Migration 16.1 — schema tests', () => {
 
   it('CHECK constraint: drop with invalid state is rejected', async () => {
     const custRes = await client.query<{ id: string }>(
-      `INSERT INTO customers(email, dek_wrapped) VALUES('constraint-test@example.com', '\\x') RETURNING id`,
+      `INSERT INTO customers(email, dek_wrapped, dek_salt) VALUES('constraint-test@example.com', '\\x', '\\x') RETURNING id`,
     )
     const customerId = custRes.rows[0]!.id
 

@@ -2,6 +2,7 @@
 import { Box, Text } from 'ink'
 import type { AccountStatus } from './eventBus.ts'
 import { FadeHighlight } from './primitives/FadeHighlight.tsx'
+import { Spinner } from './primitives/Spinner.tsx'
 
 const TRUNC = 16
 
@@ -9,18 +10,33 @@ function trunc(s: string, n = TRUNC): string {
 	return s.length <= n ? s.padEnd(n) : s.slice(0, n - 1) + '…'
 }
 
-function icon(status: AccountStatus): { glyph: string; color: string } {
+function iconColor(status: AccountStatus): string {
 	switch (status.kind) {
 		case 'cop':
-			return { glyph: '✓', color: 'green' }
+			return 'green'
 		case 'waiting':
-			return { glyph: '⏳', color: 'yellow' }
+			return 'yellow'
 		case 'retrying':
-			return { glyph: '🔄', color: 'cyan' }
+			return 'cyan'
 		case 'fail':
-			return { glyph: '✗', color: 'red' }
+			return 'red'
 		case 'pending':
-			return { glyph: '…', color: 'gray' }
+			return 'gray'
+	}
+}
+
+function staticGlyph(status: AccountStatus): string {
+	switch (status.kind) {
+		case 'cop':
+			return '✓'
+		case 'waiting':
+			return '⏳'
+		case 'retrying':
+			return '🔄'
+		case 'fail':
+			return '✗'
+		case 'pending':
+			return '…'
 	}
 }
 
@@ -31,7 +47,7 @@ export interface AccountRowProps {
 }
 
 export const AccountRow = ({ accountId, status, elapsedMs }: AccountRowProps) => {
-	const { glyph, color } = icon(status)
+	const color = iconColor(status)
 	const stepLabel =
 		status.kind === 'waiting'
 			? status.step
@@ -48,14 +64,23 @@ export const AccountRow = ({ accountId, status, elapsedMs }: AccountRowProps) =>
 
 	const flashColor: 'green' | 'red' | 'yellow' =
 		status.kind === 'cop' ? 'green' : status.kind === 'fail' ? 'red' : 'yellow'
+
+	const detailTruncated = detail.length > 20 ? detail.slice(0, 19) + '…' : detail
+
 	return (
 		<FadeHighlight triggerKey={status.kind} color={flashColor}>
 			<Box>
 				<Text>{trunc(accountId)}</Text>
-				<Text color={color}> {glyph} </Text>
+				<Text color={color}> </Text>
+				{status.kind === 'waiting' ? (
+					<Spinner />
+				) : (
+					<Text color={color}>{staticGlyph(status)}</Text>
+				)}
+				<Text color={color}> </Text>
 				<Text>{stepLabel.padEnd(20).slice(0, 20)}</Text>
 				<Text dimColor> {elapsed.padStart(6)} </Text>
-				<Text>{detail}</Text>
+				<Text>{detailTruncated}</Text>
 			</Box>
 		</FadeHighlight>
 	)
