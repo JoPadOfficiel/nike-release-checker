@@ -421,6 +421,8 @@ program
 						zip: addr.zip,
 						country: addr.country,
 						phone: addr.phone,
+						email: account.email,
+						// firstName/lastName derived later if --unlock-cards (split holder).
 					}
 					console.log(`[DRY-RUN] Loaded shipping address for ${account.id} from ${opts.addressesCsv}`)
 				} else {
@@ -445,6 +447,12 @@ program
 					expiry: row.expiry,
 					cvv: row.cvv,
 					holderName: row.holder_name,
+				}
+				// Derive firstName/lastName from card holder for the shipping form.
+				if (shippingAddress && row.holder_name) {
+					const parts = row.holder_name.trim().split(/\s+/)
+					shippingAddress.firstName = parts[0]
+					shippingAddress.lastName = parts.slice(1).join(' ') || parts[0]
 				}
 				console.log(`[DRY-RUN] Unlocked card for ${account.id} (holder: ${maskCredentials(row.holder_name)})`)
 			}

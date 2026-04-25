@@ -92,71 +92,77 @@ export async function completeShipping(
 					)
 				}
 
-				// Reveal the manual address fields if Nike hides them behind the toggle.
-				if (manualToggle) {
-					try {
-						await naturalClick(page, manualToggle)
-					} catch {
-						// fall through — fields may already be visible
-					}
+				// CRITICAL: Nike hides the manual address fields behind the autocomplete
+				// typeahead (`#search-address-input`). The actual `name="address.*"`
+				// inputs have aria-hidden="true" until the user clicks the
+				// "Saisir l'adresse manuellement" button (id=addressSuggestionOptOut).
+				// We MUST click that toggle first or fill() will refuse on hidden fields.
+				const manualBtn = page.locator('button#addressSuggestionOptOut').first()
+				if (await manualBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+					await naturalClick(page, manualBtn)
+					await page.waitForTimeout(400)
+				} else if (manualToggle) {
+					await naturalClick(page, manualToggle).catch(() => {})
+					await page.waitForTimeout(400)
 				}
 
 				const addr = opts.address
 
-				// Many of these selectors are best-effort guesses based on Nike's
-				// French checkout. We always pass through findFirstVisible →
-				// fallbacks so a single rotated `name=` doesn't crash the bot.
+				// Verified live 2026-04-25 against /fr/checkout — Nike uses
+				// `name="address.<field>"` (dot-separated namespacing) for all inputs.
+				// Fallback chains kept for resilience to future rotation.
+				if (addr.email) {
+					await fillIfPresent(page, [
+						'input[name="address.email"]',
+						'input#email',
+						'input[type="email"]',
+						'input[autocomplete="shipping email"]',
+					], addr.email)
+				}
 				if (addr.firstName) {
 					await fillIfPresent(page, [
-						'input[name="firstName"]',
-						'input[autocomplete="given-name"]',
-						'input[aria-label*="rénom"]',
+						'input[name="address.firstName"]',
+						'input#firstName',
+						'input[autocomplete="shipping given-name"]',
 					], addr.firstName)
 				}
 				if (addr.lastName) {
 					await fillIfPresent(page, [
-						'input[name="lastName"]',
-						'input[autocomplete="family-name"]',
-						'input[aria-label*="om de famille"]',
+						'input[name="address.lastName"]',
+						'input#lastName',
+						'input[autocomplete="shipping family-name"]',
 					], addr.lastName)
 				}
-				if (addr.email) {
-					await fillIfPresent(page, [
-						'input[name="email"]',
-						'input[type="email"]',
-						'input[autocomplete="email"]',
-					], addr.email)
-				}
 				await fillIfPresent(page, [
-					'input[name="address1"]',
-					'input[name="addressLine1"]',
-					'input[autocomplete="address-line1"]',
-					'input[aria-label*="dresse"]',
+					'input[name="address.address1"]',
+					'input#address1',
+					'input[autocomplete="shipping street-address"]',
 				], addr.street)
 				await fillIfPresent(page, [
-					'input[name="city"]',
-					'input[autocomplete="address-level2"]',
-					'input[aria-label*="ille"]',
-				], addr.city)
-				await fillIfPresent(page, [
-					'input[name="postalCode"]',
-					'input[name="zip"]',
-					'input[autocomplete="postal-code"]',
-					'input[aria-label*="ostal"]',
+					'input[name="address.postalCode"]',
+					'input#postalCode',
+					'input[autocomplete="shipping postal-code"]',
 				], addr.zip)
-				// Country: usually a select on Nike (auto-set from locale). Best-effort.
 				await fillIfPresent(page, [
-					'input[name="country"]',
-					'select[name="country"]',
-				], addr.country)
+					'input[name="address.city"]',
+					'input#city',
+					'input[autocomplete="shipping address-level2"]',
+				], addr.city)
+				// Country: readonly select on Nike (auto-set to "France" from locale).
+				// Skip — filling readonly inputs throws.
 				if (addr.phone) {
 					await fillIfPresent(page, [
-						'input[name="phoneNumber"]',
-						'input[name="phone"]',
-						'input[autocomplete="tel"]',
+						'input[name="address.phoneNumber"]',
+						'input#phoneNumber',
+						'input[autocomplete="shipping tel"]',
 						'input[type="tel"]',
 					], addr.phone)
 				}
+
+				// Trigger React form validation: blur the last filled field so
+				// the saveAddressBtn flips from aria-disabled=true to enabled.
+				await page.keyboard.press('Tab').catch(() => {})
+				await page.waitForTimeout(600)
 			}
 
 			// Pick the first matching button (Nike checkout has multiple submit buttons,
