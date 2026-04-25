@@ -21,7 +21,19 @@ export interface AuditLogRow {
 let _nextId = 1
 const auditStore: AuditLogRow[] = []
 
-const PII_FIELDS = new Set(['paymentMethodId', 'payment_method_id', 'secret', 'password', 'token'])
+const PII_FIELDS = new Set([
+  'paymentMethodId',
+  'payment_method_id',
+  'secret',
+  'password',
+  'token',
+  'card_number',
+  'cvv',
+  'expiry',
+  'holder_name',
+  'email',
+  'proxy_url',
+])
 
 function redact(body: unknown): unknown {
   if (body == null || typeof body !== 'object') return body
@@ -40,10 +52,10 @@ export const audit = {
         customer_id: req.customerId ?? null,
         actor: req.apiKeyId ?? null,
         action,
-        resource_type: 'drop',
+        resource_type: action.includes('.') ? (action.split('.')[0] ?? 'resource') : 'resource',
         resource_id: resourceId,
         payload_redacted_json: JSON.stringify({
-          ...redact(req.body as unknown) as Record<string, unknown>,
+          ...(redact(req.body as unknown) as Record<string, unknown>),
           ...(extra ?? {}),
         }),
         created_at: new Date(),
@@ -54,7 +66,7 @@ export const audit = {
         customer_id: req.customerId,
         actor: req.apiKeyId,
         action,
-        resource_type: 'drop',
+        resource_type: action.includes('.') ? (action.split('.')[0] ?? 'resource') : 'resource',
         resource_id: resourceId,
         payload_redacted: redact(req.body as unknown),
         ...(extra != null ? { payload_extra: extra } : {}),

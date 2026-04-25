@@ -1,6 +1,6 @@
 # Story 16.3: Card Vault — AES-256-GCM Per-Field Encryption (Multi-Tenant)
 
-Status: backlog
+Status: done
 
 ## Story
 

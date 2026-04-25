@@ -1,6 +1,6 @@
 # Story 16.1: Multi-Tenant Postgres Schema + Migrations
 
-Status: backlog
+Status: done
 
 ## Story
 

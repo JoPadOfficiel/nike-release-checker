@@ -460,27 +460,172 @@ epics:
       - id: "11-1"
         title: "Ink TUI Dashboard Multi-Account Live"
         file: stories/11-1-ink-dashboard-live.md
-        status: backlog
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "49 TUI tests pass. Dashboard, AccountRow, eventBus, renderDashboard implemented. Event-driven ≥2 FPS, 80-col NFR27 compliant."
       - id: "11-2"
         title: "Emojis + Animations + Progress Bars"
         file: stories/11-2-tui-animations-polish.md
-        status: backlog
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "Spinner, FadeHighlight, CountAnimation, AnimationsContext. Auto-disabled under NODE_TEST_CONTEXT. No timer leaks."
       - id: "11-3"
         title: "Pre-Drop Warmup Mode with Countdown"
         file: stories/11-3-pre-drop-warmup.md
-        status: backlog
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "WarmupWidget uses primitives/Spinner (TODO resolved). useInterval hook with stable callback ref. Countdown via useInterval."
       - id: "11-4"
         title: "Final Summary Screen + Auto-Save Report"
         file: stories/11-4-final-summary-screen.md
-        status: backlog
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "SummaryScreen, openReportFolder, renderSummary. formatDuration unit tested. process.chdir cleanup in tests."
       - id: "11-5"
         title: "Retry Failed Accounts Action"
         file: stories/11-5-retry-failed-accounts.md
-        status: backlog
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "RetrySelection with useRef fix for ink v6 handler re-registration race. RetryController cap enforced. All 5 RetrySelection tests pass."
+
+  - id: 13
+    title: "Multi-Country Support"
+    stories:
+      - id: "13-1"
+        title: "Country Registry — Interface + Initial Country Set"
+        file: stories/13-1-country-registry.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "181 tests pass. 52-country registry, 10 explicit + 42 SDK-generated. Valibot validation at module load."
+
+      - id: "13-2"
+        title: "Per-Country Cart Endpoint"
+        file: stories/13-2-per-country-cart-endpoint.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "cartEndpoints builder centralised in endpoints.ts. All cart/fulfillment/payment URLs parameterised by Country object."
+
+      - id: "13-3"
+        title: "Locale Validation"
+        file: stories/13-3-locale-validation.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "validatePhone/validateZip + phoneSchema/zipSchema. All 10 explicit countries covered with valid/invalid fixtures."
+
+      - id: "13-4"
+        title: "Per-Country Selector Overrides"
+        file: stories/13-4-per-country-selector-overrides.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "LRU cache (10 entries), deep-merge, cwd option for test isolation. MEDIUM patch: dead overrideRel variable removed."
+
+      - id: "13-5"
+        title: "Multi-Country Drop CSV"
+        file: stories/13-5-multi-country-drop-csv.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "country column with normalizeCountryCode, UK→GB alias, disabled/unknown distinction. HIGH patch: resolveAccountsFilter explicit filter now respects country-scoping."
+
+  - id: 17
+    title: "Drop-as-a-Service"
+    stories:
+      - id: "17-1"
+        title: "Drop Entity Lifecycle"
+        file: stories/17-1-drop-entity-lifecycle.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "State machine with 7 states, all invalid transitions rejected. InvalidDropTransitionError with from/to properties. isTerminal/allowedTransitions helpers. dropRepository.transitionState with in-memory audit log. 30 tests pass."
+
+      - id: "17-2"
+        title: "Drop Scheduler"
+        file: stories/17-2-drop-scheduler.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "Leader-election via acquireLock dep. SCHEDULED→ARMED at T-5min, ARMED→ACTIVE at T-0. concurrencyCap per tier (solo=1, pro=5, enterprise=unlimited). Dispatch race patched: transitionState flag distinguishes race-skip from dispatch-fail. 4 scheduler tests pass."
+
+      - id: "17-3"
+        title: "Drop Run Isolation"
+        file: stories/17-3-drop-run-isolation.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "SKIP LOCKED simulation in JS single-thread. Retry chain 1→2→3 capped at MAX_ATTEMPTS=3. Retryable classifications: blocked, 3ds_timeout, error. leaseReaper re-queues stale COPPING runs (0ms threshold in tests). hasInFlight for 409 guard. 15 tests pass."
+
+      - id: "17-4"
+        title: "Drop Event Stream WebSocket"
+        file: stories/17-4-drop-event-stream-ws.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "Auth via query-string or initial JSON message (1s timeout). Ownership check 4404. drop.snapshot replay on connect. In-process EventEmitter bus. Backpressure close 1013 at 1MB. Heartbeat ping/pong 30s/60s. Flaky test fixed: eliminated 50ms race by awaiting snapshot before publishing live event. 6 tests pass."
+
+      - id: "17-5"
+        title: "Drop Warmup Port"
+        file: stories/17-5-drop-warmup-port.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "Phased warmup: T-5 poll, T-3 sessions, T-1 contexts, T=0 activate. Collapse path when SKU already live. AbortController fully respected at all abort check points. finalize SKIPPED now properly awaited (was fire-and-forget bug). preLaunchedContexts map keyed by nikeAccountId. 5 tests pass."
+
+  - id: 16
+    title: "Account Vault (Encrypted Credential Storage)"
+    stories:
+      - id: "16-1"
+        title: "Multi-Tenant Postgres Schema"
+        file: stories/16-1-multi-tenant-postgres-schema.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "7 migrations (0001-0007). Row-level isolation via customer_id FK on all tenant tables. runner.ts with up/down/status. ON DELETE SET NULL on audit_log, ON DELETE CASCADE elsewhere."
+
+      - id: "16-2"
+        title: "Per-Customer KMS Key (HKDF DEK Derivation)"
+        file: stories/16-2-per-customer-kms-key.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "KmsAdapter interface, LocalKmsStub, AwsKmsAdapter (lazy dynamic import). provisionDek + deriveDek with HKDF-SHA256. LRU cache (1000 entries, TTL 5min) with dispose() zeroize. SEC patch: KMSClient singleton reused across calls."
+
+      - id: "16-3"
+        title: "Card Vault — Encrypted Rows"
+        file: stories/16-3-card-vault-encrypted-rows.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "AES-256-GCM per-field encryption (IV || ciphertext || tag). cardsDb: tenant-scoped create/get/list/remove/getPlaintextForWorker. CardMetaSchema additionalProperties:false blocks PAN leakage. Luhn validation. SEC audit: card_number/cvv/expiry/holder_name added to PII_FIELDS."
+
+      - id: "16-4"
+        title: "Nike Account Credential Storage"
+        file: stories/16-4-nike-account-credential-storage.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "email_lookup HMAC-SHA256 for deterministic dedup. NikeAccountMetaSchema additionalProperties:false. Cross-tenant isolation on all CRUD operations. DELETE blocked with 409 if in-flight drop_run. loadForWorker restricted to worker pool only."
+
+      - id: "16-5"
+        title: "GDPR DELETE /v1/account (Soft-Delete + 30-Day Hard-Purge)"
+        file: stories/16-5-gdpr-delete-customer.md
+        status: done
+        completed_at: "2026-04-25"
+        branch: epic/bot-package
+        notes: "X-Confirm-Delete header required (400 otherwise). 409 if ACTIVE/SCHEDULED drops exist. Soft-delete + API key revoke + immediate purgePii() fire-and-forget. gdprPurgerTick scrambles dek_wrapped before hard-delete. Audit log preserved (ON DELETE SET NULL). SEC audit: resource_type inferred from action prefix (was hardcoded 'drop')."
+
 
 summary:
-  total: 62
-  done: 42
+  total: 77
+  done: 57
   in_progress: 0
   ready_for_dev: 4
   backlog: 16

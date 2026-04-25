@@ -1,6 +1,6 @@
 # Story 16.2: Per-Customer Encryption Key (Master KMS + HKDF Derivation)
 
-Status: backlog
+Status: done
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 16.5: GDPR `DELETE /v1/account` (Soft-Delete + 30-Day Hard-Purge)
 
-Status: backlog
+Status: done
 
 ## Story
 

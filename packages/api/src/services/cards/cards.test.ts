@@ -26,6 +26,7 @@ import { setKmsAdapter } from '../../crypto/dek.ts'
 import { LocalKmsStub } from '../../crypto/kms.local.ts'
 import { buildApp } from '../../app.ts'
 import { getDek } from '../../crypto/dekCache.ts'
+import { audit } from '../audit.ts'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -241,6 +242,7 @@ describe('POST /v1/account/cards — response leakage matrix', () => {
     customersDb._clear()
     cardsDb._clear()
     apiKeysDb._clear()
+    audit._clear()
 
     const customer = await customersDb.create({ email: 'rest-test@example.com' })
     apiKeysDb._seed({
@@ -369,5 +371,28 @@ describe('POST /v1/account/cards — response leakage matrix', () => {
       headers: authHeader('key001'),
     })
     assert.equal(getResp.statusCode, 404)
+  })
+
+  it('audit log for card.create contains no PAN, CVV, or full holder_name', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/v1/account/cards',
+      headers: authHeader('key001'),
+      payload: {
+        holder_name: 'Audit Test User',
+        card_number: VALID_VISA,
+        expiry: '12/26',
+        cvv: '999',
+      },
+    })
+
+    const rows = audit._findByAction('card.create')
+    assert.ok(rows.length >= 1, 'audit row must exist')
+    const payloadStr = rows[rows.length - 1]!.payload_redacted_json ?? ''
+    assert.ok(!payloadStr.includes(VALID_VISA), 'PAN must not appear in audit payload')
+    assert.ok(!payloadStr.includes('999'), 'CVV must not appear in audit payload')
+    assert.ok(!payloadStr.includes('Audit Test User'), 'holder_name must not appear in audit payload')
+    assert.ok(!payloadStr.includes('12/26'), 'expiry must not appear in audit payload')
+    assert.equal(rows[rows.length - 1]!.resource_type, 'card', 'resource_type must be "card" not "drop"')
   })
 })

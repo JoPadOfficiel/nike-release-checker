@@ -12,7 +12,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import { hash as argon2Hash } from 'argon2'
 import { randomUUID } from 'node:crypto'
 
@@ -25,6 +25,8 @@ import { webhooksDb } from '../../db/webhooks.ts'
 import { dropsDb } from '../../db/drops.ts'
 import { audit } from '../audit.ts'
 import { gdprPurgerTick } from '../../workers/gdprPurger.ts'
+import { setKmsAdapter } from '../../crypto/dek.ts'
+import { LocalKmsStub } from '../../crypto/kms.local.ts'
 
 // ---------------------------------------------------------------------------
 // Helper: create a customer + one valid API key, return bearer token + ids
@@ -50,6 +52,7 @@ async function createCustomerWithKey(email = `gdpr-${randomUUID()}@test.com`) {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  setKmsAdapter(new LocalKmsStub())
   customersDb._clear()
   apiKeysDb._clear()
   cardsDb._clear()
@@ -57,6 +60,10 @@ beforeEach(() => {
   webhooksDb._reset()
   dropsDb._reset()
   audit._clear()
+})
+
+afterEach(() => {
+  setKmsAdapter(null)
 })
 
 // ---------------------------------------------------------------------------

@@ -34,8 +34,11 @@ async function getSdk(): Promise<AwsSdk> {
   return _sdk
 }
 
+// PATCH 16.x-PERF-1: reuse KMSClient across calls (singleton per adapter instance)
 export class AwsKmsAdapter implements KmsAdapter {
   private readonly keyId: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _client: any = null
 
   constructor(keyId?: string) {
     const id = keyId ?? process.env['MASTER_KMS_KEY_ID']
@@ -45,9 +48,16 @@ export class AwsKmsAdapter implements KmsAdapter {
     this.keyId = id
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async getClient(): Promise<any> {
+    const sdk = await getSdk()
+    if (!this._client) this._client = new sdk.KMSClient({})
+    return this._client
+  }
+
   async encrypt(plaintext: Buffer): Promise<Buffer> {
     const sdk = await getSdk()
-    const client = new sdk.KMSClient({})
+    const client = await this.getClient()
     const cmd = new sdk.EncryptCommand({ KeyId: this.keyId, Plaintext: plaintext })
     const res = await client.send(cmd) as { CiphertextBlob?: Uint8Array }
     if (!res.CiphertextBlob) throw new Error('AwsKmsAdapter.encrypt: no CiphertextBlob returned')
@@ -56,7 +66,7 @@ export class AwsKmsAdapter implements KmsAdapter {
 
   async decrypt(wrapped: Buffer): Promise<Buffer> {
     const sdk = await getSdk()
-    const client = new sdk.KMSClient({})
+    const client = await this.getClient()
     const cmd = new sdk.DecryptCommand({ KeyId: this.keyId, CiphertextBlob: wrapped })
     const res = await client.send(cmd) as { Plaintext?: Uint8Array }
     if (!res.Plaintext) throw new Error('AwsKmsAdapter.decrypt: no Plaintext returned')
@@ -65,7 +75,7 @@ export class AwsKmsAdapter implements KmsAdapter {
 
   async generateDataKey(): Promise<{ plaintext: Buffer; wrapped: Buffer }> {
     const sdk = await getSdk()
-    const client = new sdk.KMSClient({})
+    const client = await this.getClient()
     const cmd = new sdk.GenerateDataKeyCommand({ KeyId: this.keyId, KeySpec: 'AES_256' })
     const res = await client.send(cmd) as { Plaintext?: Uint8Array; CiphertextBlob?: Uint8Array }
     if (!res.Plaintext || !res.CiphertextBlob) {
