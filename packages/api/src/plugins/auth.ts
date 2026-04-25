@@ -30,7 +30,7 @@ const TOKEN_RE = /^nrc_([a-z0-9]{6,16})_([a-z0-9]{24,64})$/i
  * prevents timing-based enumeration of valid key IDs.
  */
 const DUMMY_HASH =
-	'$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHRzb21lc2FsdA$placeholder+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+	'$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$TU/sewH4OFKkWQOXg3la9LMg3gi/7KcxWxX8wQ2Bvk0'
 
 /**
  * Build an RFC 9457 problem-detail object.

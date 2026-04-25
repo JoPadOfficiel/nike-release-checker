@@ -18,12 +18,6 @@ export { UnknownCountryError } from '../../country/registry.ts'
 
 const API_ORIGIN = 'https://api.nike.com'
 
-// RFC 6901 JSON Pointer escaping: `~` → `~0`, `/` → `~1`. Required because
-// `itemId` is interpolated into JSON Patch `path` strings (see removeItem,
-// setQuantity). Order matters: tilde first, then slash.
-const escapeJsonPointer = (token: string): string =>
-	token.replace(/~/g, '~0').replace(/\//g, '~1')
-
 // Local request-init shape. Named `CartRequestInit` so it does not shadow the
 // global DOM `RequestInit` type when this file is imported elsewhere.
 interface CartRequestInit {
@@ -127,27 +121,47 @@ export class NikeCartApi {
 	}
 
 	removeItem(itemId: string): Promise<Cart> {
-		// Nike's PATCH cart API rejects an RFC-6902-pure `remove` (it returns
-		// 400 MISSING_REQUIRED on `value`). Live capture shows it expects a
-		// `value` payload. Cast to JsonPatchOp via unknown — the type union
-		// enforces RFC 6902 shape but Nike's server contract is laxer here.
+		// Story 12.11 live-confirmed contract (2026-04-25):
+		//   op:remove, path:/items, value:{id: itemId}  → 200 OK
+		//
+		// All other shapes tested (12 variants):
+		//   op:remove path:/items/{id}                  → 400 MISSING_REQUIRED (value required)
+		//   op:remove path:/items/{id} value:null        → 400 FIELD_INVALID
+		//   op:remove path:/items/{id} value:""          → 400 FIELD_INVALID
+		//   op:remove path:/items/{id} value:{}          → 400 FIELD_INVALID
+		//   op:remove path:/items/{id} value:{fullItem}  → 400 FIELD_INVALID
+		//   op:remove path:/items value:itemId (string)  → 400 FIELD_INVALID
+		//   op:remove path:/items value:[itemId]         → 400 FIELD_INVALID
+		//   op:replace path:/items value:[]              → 400 FIELD_INVALID
+		//
+		// Nike's API uses a non-standard JSON Patch shape: the `path` targets
+		// the collection (`/items`), and the `value` carries the selector
+		// `{id}` — the opposite of RFC 6902 which encodes the selector in `path`.
+		// Cast through unknown because JsonPatchOp enforces RFC 6902 shape.
 		return this.patch([
-			{
-				op: 'remove',
-				path: `/items/${escapeJsonPointer(itemId)}`,
-				value: null,
-			} as unknown as JsonPatchOp,
+			{ op: 'remove', path: '/items', value: { id: itemId } } as unknown as JsonPatchOp,
 		])
 	}
 
-	setQuantity(itemId: string, quantity: number): Promise<Cart> {
-		// qty=0 still issues `replace` — never auto-convert to remove.
+	setQuantity(itemId: string, skuId: string, quantity: number): Promise<Cart> {
+		// Story 12.11 live-confirmed contract (2026-04-25):
+		//   op:replace, path:/items, value:{id, skuId, quantity}  → 200 OK
+		//
+		// All other shapes tested (11 variants):
+		//   op:replace path:/items/{id}/quantity value:N (number) → 400 FIELD_INVALID
+		//   op:replace path:/items/{id}/quantity value:"N"        → 400 FIELD_INVALID
+		//   op:replace path:/items/{id} value:{quantity}          → 400 FIELD_INVALID
+		//   op:replace path:/items/{id} value:{fullItem}          → 400 FIELD_INVALID
+		//   op:replace path:/items value:{id,quantity} (no skuId) → 400 MISSING_REQUIRED skuId
+		//   op:merge path:/items/{id} value:{quantity}            → 400 FIELD_INVALID
+		//   op:merge path:/items value:{id,quantity}              → 400 FIELD_INVALID
+		//
+		// Like removeItem, Nike's API uses a non-standard shape: `path` targets
+		// the collection and `value` carries both the selector (`id`) and the
+		// mutation (`skuId`, `quantity`). `skuId` is required by Nike (400 MISSING_REQUIRED
+		// without it). Cast through unknown because JsonPatchOp enforces RFC 6902.
 		return this.patch([
-			{
-				op: 'replace',
-				path: `/items/${escapeJsonPointer(itemId)}/quantity`,
-				value: quantity,
-			},
+			{ op: 'replace', path: '/items', value: { id: itemId, skuId, quantity } } as unknown as JsonPatchOp,
 		])
 	}
 

@@ -404,7 +404,7 @@ program
 			const productUrl = opts.url ?? `https://www.nike.com/fr/launch/t/${opts.slug}`
 
 			// 1. Load shipping address from addresses.csv (if file exists).
-			let shippingAddress: { street: string; city: string; zip: string; country: string; phone?: string } | undefined
+			let shippingAddress: { street: string; city: string; zip: string; country: string; phone?: string; email?: string; firstName?: string; lastName?: string } | undefined
 			if (existsSync(opts.addressesCsv)) {
 				const knownIds = new Set([account.id])
 				const accCountries = new Map([[account.id, account.country]])

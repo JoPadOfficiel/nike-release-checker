@@ -135,16 +135,28 @@ export function createDropScheduler(deps: SchedulerDeps): DropScheduler {
           continue
         }
 
+        let transitioned = false
         try {
           transitionState(row.id, 'ACTIVE', 'scheduler:tick', row.customer_id)
+          transitioned = true
           metrics.promotionsActive++
           logger.info({ dropId: row.id }, 'scheduler.promotion.active')
           await workerPool.dispatchDrop(row.id)
         } catch (err) {
-          logger.warn(
-            { dropId: row.id, err: String(err) },
-            'scheduler.promotion.active.skip',
-          )
+          if (!transitioned) {
+            // State machine rejected transition (race/already transitioned) — skip
+            logger.warn(
+              { dropId: row.id, err: String(err) },
+              'scheduler.promotion.active.skip',
+            )
+          } else {
+            // transitionState succeeded but dispatchDrop failed — log at WARN.
+            // Drop is now ACTIVE; the lease reaper or a worker poll will pick it up.
+            logger.warn(
+              { dropId: row.id, err: String(err) },
+              'scheduler.dispatch.failed',
+            )
+          }
         }
       }
     } finally {

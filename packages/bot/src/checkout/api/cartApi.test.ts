@@ -215,28 +215,31 @@ describe('NikeCartApi.getCart', () => {
 })
 
 describe('NikeCartApi.removeItem', () => {
-	it('issues PATCH with remove op targeting /items/{id}', async () => {
+	it('issues PATCH with remove op at /items and value:{id} (Story 12.11 contract)', async () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
 
 		await api.removeItem('item-42')
 
 		const body = JSON.parse(calls[0]!.data ?? '[]')
-		// Nike requires a `value` field on remove ops (live-confirmed: pure
-		// RFC 6902 returns 400 MISSING_REQUIRED on `value`).
+		// Story 12.11 live-confirmed contract (2026-04-25):
+		// Nike uses non-standard JSON Patch shape — path targets the collection (/items)
+		// and value carries the selector {id}. All RFC 6902-conformant shapes rejected.
 		assert.deepEqual(body, [
-			{ op: 'remove', path: '/items/item-42', value: null },
+			{ op: 'remove', path: '/items', value: { id: 'item-42' } },
 		])
 	})
 
-	it('escapes JSON Pointer special chars in itemId (~ → ~0, / → ~1)', async () => {
+	it('does NOT escape the itemId into the path (id goes in value.id)', async () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
 
 		await api.removeItem('a~b/c')
 
 		const body = JSON.parse(calls[0]!.data ?? '[]')
-		assert.equal(body[0].path, '/items/a~0b~1c')
+		// path is always /items — the id is in value.id, unescaped
+		assert.equal(body[0].path, '/items')
+		assert.equal(body[0].value.id, 'a~b/c')
 	})
 
 	it('pins content-type to application/json', async () => {
@@ -251,15 +254,18 @@ describe('NikeCartApi.removeItem', () => {
 })
 
 describe('NikeCartApi.setQuantity', () => {
-	it('issues PATCH with replace op targeting /items/{id}/quantity', async () => {
+	it('issues PATCH with replace op at /items and value:{id,skuId,quantity} (Story 12.11 contract)', async () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
 
-		await api.setQuantity('item-7', 2)
+		await api.setQuantity('item-7', 'sku-abc', 2)
 
 		const body = JSON.parse(calls[0]!.data ?? '[]')
+		// Story 12.11 live-confirmed contract (2026-04-25):
+		// Nike uses non-standard JSON Patch shape — path targets the collection (/items),
+		// value carries selector (id) + skuId + quantity. skuId is required.
 		assert.deepEqual(body, [
-			{ op: 'replace', path: '/items/item-7/quantity', value: 2 },
+			{ op: 'replace', path: '/items', value: { id: 'item-7', skuId: 'sku-abc', quantity: 2 } },
 		])
 	})
 
@@ -267,27 +273,31 @@ describe('NikeCartApi.setQuantity', () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
 
-		await api.setQuantity('item-7', 0)
+		await api.setQuantity('item-7', 'sku-abc', 0)
 
 		const body = JSON.parse(calls[0]!.data ?? '[]')
 		assert.equal(body[0].op, 'replace')
-		assert.equal(body[0].value, 0)
+		assert.equal(body[0].value.quantity, 0)
 	})
 
-	it('escapes JSON Pointer special chars in itemId', async () => {
+	it('does NOT escape the itemId into the path (id goes in value.id)', async () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
 
-		await api.setQuantity('a/b~c', 5)
+		await api.setQuantity('a/b~c', 'sku-xyz', 5)
 
 		const body = JSON.parse(calls[0]!.data ?? '[]')
-		assert.equal(body[0].path, '/items/a~1b~0c/quantity')
+		// path is always /items — id is in value.id, unescaped
+		assert.equal(body[0].path, '/items')
+		assert.equal(body[0].value.id, 'a/b~c')
+		assert.equal(body[0].value.skuId, 'sku-xyz')
+		assert.equal(body[0].value.quantity, 5)
 	})
 
 	it('pins content-type to application/json', async () => {
 		const { page, calls } = mockPage({ json: sampleCart })
 		const api = new NikeCartApi(page)
-		await api.setQuantity('id', 1)
+		await api.setQuantity('id', 'sku', 1)
 		assert.equal(
 			calls[0]!.headers?.['content-type'],
 			'application/json; charset=UTF-8',

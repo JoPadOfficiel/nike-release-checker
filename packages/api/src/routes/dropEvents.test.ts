@@ -148,11 +148,12 @@ describe('dropEvents WebSocket — Story 17.4', () => {
 
     const ws = await app.injectWS(`/v1/drops/${drop.id}/events?api_key=${VALID_TOKEN}`)
 
-    // First message is snapshot — collect snapshot + next live event (total 2)
-    const collectPromise = collectMessages(ws, 2)
+    // Wait for snapshot first: guarantees the server-side bus subscription is
+    // active before we publish the live event, eliminating the 50 ms timing race.
+    const [snapshot] = await collectMessages(ws, 1)
 
-    // Give the connection time to subscribe, then publish a live event
-    await new Promise<void>((r) => setTimeout(r, 50))
+    // Subscription is established once snapshot has been received; collect next event.
+    const liveCollect = collectMessages(ws, 1)
 
     dropEventBus.publish(drop.id, {
       event: 'drop.activated',
@@ -161,7 +162,7 @@ describe('dropEvents WebSocket — Story 17.4', () => {
       data: { run_count: 1 },
     })
 
-    const [snapshot, live] = await collectPromise
+    const [live] = await liveCollect
     ws.terminate()
     await app.close()
 

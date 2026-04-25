@@ -2,7 +2,6 @@ import type { Page } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
 import { dismissCookieConsent } from '../dismissCookies.ts'
-import { naturalClick } from '../naturalClick.ts'
 
 export async function navigateCheckout(
   page: Page,

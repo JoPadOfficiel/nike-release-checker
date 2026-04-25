@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { CheckoutResult } from './SummaryScreen.tsx'
 import type { ReportStatus } from '../logger/reportWriter.ts'
@@ -33,6 +33,11 @@ export const RetrySelection: React.FC<RetrySelectionProps> = ({
 }) => {
 	const [cursor, setCursor] = useState(0)
 	const [selected, setSelected] = useState<Set<string>>(new Set())
+	// Refs so useInput callback reads fresh values despite ink v6 re-registration
+	const selectedRef = useRef(selected)
+	selectedRef.current = selected
+	const cursorRef = useRef(cursor)
+	cursorRef.current = cursor
 
 	const maxIdLen = useMemo(
 		() => failed.reduce((m, r) => Math.max(m, r.accountId.length), 0),
@@ -55,8 +60,9 @@ export const RetrySelection: React.FC<RetrySelectionProps> = ({
 			return
 		}
 		if (key.return) {
-			if (selected.size === 0) return
-			const picked = failed.filter((r) => selected.has(r.accountId))
+			const cur = selectedRef.current
+			if (cur.size === 0) return
+			const picked = failed.filter((r) => cur.has(r.accountId))
 			onConfirm(picked)
 			return
 		}
@@ -69,7 +75,7 @@ export const RetrySelection: React.FC<RetrySelectionProps> = ({
 			return
 		}
 		if (input === ' ') {
-			const row = failed[cursor]
+			const row = failed[cursorRef.current]
 			if (!row) return
 			// Prevent toggling accounts that have reached the max-retry cap.
 			if (retryController && !retryController.canRetry(row.accountId)) return
