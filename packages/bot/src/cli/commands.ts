@@ -620,6 +620,29 @@ export function getSessionCardsKey(): Buffer | null {
 }
 
 program
+	.command('kpsdk-stats')
+	.description('Print KPSDK token cache statistics (hits, misses, evictions, size). Run during a drop to verify warm-up efficiency.')
+	.option('--json', 'Output as JSON', false)
+	.action(async (opts: { json?: boolean }) => {
+		const { kpsdkCacheHolder } = await import('../stealth/kpsdk/cache.ts')
+		const stats = kpsdkCacheHolder.instance.stats()
+		if (opts.json) {
+			console.log(JSON.stringify(stats))
+		} else {
+			const hitRate = (stats.hits + stats.misses) > 0
+				? ((stats.hits / (stats.hits + stats.misses)) * 100).toFixed(1)
+				: '—'
+			console.log('\nKPSDK Token Cache Statistics\n')
+			console.log(`  Size       : ${stats.size}`)
+			console.log(`  Hits       : ${stats.hits}`)
+			console.log(`  Misses     : ${stats.misses}`)
+			console.log(`  Evictions  : ${stats.evictions}`)
+			console.log(`  Hit rate   : ${hitRate}%`)
+			console.log()
+		}
+	})
+
+program
 	.command('install-browser')
 	.description('Download and install Playwright Chromium (usually auto-run on first launch)')
 	.option('--proxy <url>', 'HTTP/HTTPS proxy for download (e.g. http://corp:8080)')

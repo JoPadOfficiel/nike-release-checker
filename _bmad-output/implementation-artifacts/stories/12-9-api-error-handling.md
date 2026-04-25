@@ -1,6 +1,6 @@
 # Story 12.9: API error handling envelope — KPSDK refresh, backoff, idempotent retry, BlockReason mapping
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -45,7 +45,7 @@ So that transient Nike issues never bleed into per-account outcomes and the orch
 
 ## Tasks / Subtasks
 
-### Task 1: Define `withApiRetry` envelope (AC: orchestration)
+### Task 1: [x] Define `withApiRetry` envelope (AC: orchestration)
 
 Create `packages/bot/src/checkout/api/withApiRetry.ts`:
 
@@ -78,7 +78,7 @@ export const withApiRetry = async <T>(fn: () => Promise<T>, ctx: RetryContext): 
 
 Each retry helper is a single-attempt; envelope MAX is one retry per error class per call.
 
-### Task 2: Typed error classes (AC: error taxonomy)
+### Task 2: [x] Typed error classes (AC: error taxonomy)
 
 Create `packages/bot/src/checkout/api/apiErrors.ts` consolidating the cross-cutting errors:
 
@@ -99,7 +99,7 @@ export class SessionExpiredError extends Error {
 
 These are distinct from the per-story errors (e.g., `CheckoutKpsdkBlockedError`). Story-level errors are caught and re-thrown as envelope errors after retry exhaustion.
 
-### Task 3: KPSDK refresh helper (AC: 403 retry)
+### Task 3: [x] KPSDK refresh helper (AC: 403 retry)
 
 Reference `kpsdkClient` from Epic 14 (skeleton in V3_MIGRATION_PLAN Phase 1 deliverables). For Epic 12 scope, define the contract:
 
@@ -119,7 +119,7 @@ export const stubKpsdkClient: KpsdkClient = {
 }
 ```
 
-### Task 4: BlockReason mapping table (AC: 100% mapping coverage)
+### Task 4: [x] BlockReason mapping table (AC: 100% mapping coverage)
 
 Create `packages/bot/src/checkout/api/errorToBlockReason.ts`:
 
@@ -157,7 +157,7 @@ export const errorToBlockReason = (e: unknown): BlockReason => {
 
 This is the single source of truth for outcome classification across Epic 12.
 
-### Task 5: Idempotency classification (AC: 5xx idempotent retry)
+### Task 5: [x] Idempotency classification (AC: 5xx idempotent retry)
 
 Add an `isIdempotent` set:
 
@@ -173,7 +173,7 @@ const IDEMPOTENT_OPS = new Set([
 
 Each call site must declare `idempotent: true | false` when calling `withApiRetry`. The envelope refuses to retry 5xx for `idempotent: false` (e.g., `PATCH /buy/carts` ATC).
 
-### Task 6: Backoff helper (AC: 429 capped wait)
+### Task 6: [x] Backoff helper (AC: 429 capped wait)
 
 ```ts
 const parseRetryAfter = (e: { headers?: Record<string, string> }): number => {
@@ -196,7 +196,7 @@ const retryAfterBackoff = async <T>(fn: () => Promise<T>, ctx: RetryContext, e: 
 }
 ```
 
-### Task 7: Wire into all API classes (AC: every call wrapped)
+### Task 7: [ ] Wire into all API classes (AC: every call wrapped)
 
 In Story 12.7's `hybridPipeline.ts`, every API call goes through `withApiRetry`:
 
@@ -209,7 +209,7 @@ const view = await withApiRetry(
 
 Add a helper `wrapStep(stepName, idempotent, fn)` that bakes `step` and `idempotent` into the ctx so call sites stay readable.
 
-### Task 8: Unit tests (AC: every retry branch + BlockReason mapping coverage)
+### Task 8: [x] Unit tests (AC: every retry branch + BlockReason mapping coverage)
 
 Create `packages/bot/src/checkout/api/withApiRetry.test.ts`. Mock `fn` to control status codes. Cover:
 - 403 → kpsdk.refresh called → retry succeeds → returns
@@ -225,7 +225,7 @@ Create `packages/bot/src/checkout/api/withApiRetry.test.ts`. Mock `fn` to contro
 
 Create `packages/bot/src/checkout/api/errorToBlockReason.test.ts` with one assertion per mapping line in Task 4.
 
-### Task 9: Logging (AC: structured warn/error)
+### Task 9: [x] Logging (AC: structured warn/error)
 
 Every retry path emits:
 
@@ -282,3 +282,47 @@ Files modified:
 - Migration plan: `docs/V3_MIGRATION_PLAN.md` (Phase 1 risk register — KPSDK rotation; Phase 2 risk — feature flag drift)
 - Stories 12.1-12.8 (every typed error class consumed by the mapping table)
 - Epic 14 (kpsdkClient implementation, parallel dependency)
+
+## File List
+
+### Created
+- `packages/bot/src/checkout/api/apiErrors.ts` — KpsdkBlockedError, RateLimitedError, ServerError, SessionExpiredError
+- `packages/bot/src/checkout/api/withApiRetry.ts` — envelope + retry helpers + wrapStep
+- `packages/bot/src/checkout/api/kpsdkClient.types.ts` — KpsdkClient interface + stubKpsdkClient
+- `packages/bot/src/checkout/api/errorToBlockReason.ts` — BlockReason lookup table (12.1 errors active; 12.2-12.8 TODO stubs)
+- `packages/bot/src/checkout/api/withApiRetry.test.ts` — 20 tests covering every retry branch
+- `packages/bot/src/checkout/api/errorToBlockReason.test.ts` — 11 tests (one assertion per mapping line)
+- `packages/bot/src/outcomes/blockReason.ts` — BlockReason union type (new outcomes dir)
+
+### Modified
+- `packages/bot/src/checkout/api/index.ts` — exports all new symbols
+
+## Dev Agent Record
+
+### Implementation Decisions
+
+**Task 7 not wired (deferred):** `hybridPipeline.ts` does not exist yet (Story 12.7). The `wrapStep` helper is implemented and exported; wiring will happen in Story 12.7 when the pipeline lands. Task 7 marked `[ ]` accordingly.
+
+**errorToBlockReason scope:** The story spec imports from 9 API modules that are not yet created (Stories 12.2-12.8). Importing non-existent modules breaks `tsc --noEmit`. The implemented version covers all currently existing errors (NikeCartApiError from 12.1, plus all 4 envelope errors). Each future mapping has a `// TODO(Story 12.X)` comment stub so the integrating author cannot miss it.
+
+**No valibot runtime validation in this story:** The deferred-work item "runtime validation of Cart/CartItem shape" was noted but out of scope for 12.9 (which owns the retry envelope, not the response parser). The story spec does not include it in the ACs or Tasks. Valibot is available in package.json if Story 12.1 revisited wants to add it.
+
+**setTimeout patching strategy:** Tests that exercise the 429 backoff path replace `globalThis.setTimeout` in a `before()` hook to execute callbacks via `Promise.resolve().then()` instead of real delays. This keeps the suite fast without requiring a separate timer mocking library.
+
+**erasableSyntaxOnly compliance:** All error classes use explicit property assignments in the body (not constructor parameter properties) to comply with `erasableSyntaxOnly: true`.
+
+### Acceptance Criteria Verification
+
+- [x] AC 403/KPSDK: retryAfterKpsdk calls kpsdkClient.refresh, retries once, throws KpsdkBlockedError on exhaustion — covered by 3 tests
+- [x] AC 429/Retry-After: waits min(retryAfter, 5) s, retries once, throws RateLimitedError — covered by 4 tests
+- [x] AC 5xx idempotent: retries after 200 ms if idempotent, throws immediately if not — covered by 4 tests
+- [x] AC 401: calls sessionRefresh, retries once, throws SessionExpiredError — covered by 2 tests
+- [x] AC unhandled: logged with unhandled_api_error and propagated — covered by 2 tests
+- [x] AC unit tests: every retry path has positive (recovers) + negative (exhausts) test cases
+- [x] AC BlockReason mapping: 100% coverage of documented mappings (11 assertions for currently-active mappings; TODO stubs for future stories)
+
+## Change Log
+
+| Date | Author | Change |
+|------|--------|--------|
+| 2026-04-25 | Dev Agent | Initial implementation — Tasks 1-6, 8-9 complete; Task 7 deferred to Story 12.7 |

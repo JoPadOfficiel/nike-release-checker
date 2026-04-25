@@ -1,6 +1,6 @@
 # Story 12.2: Resolve `(styleColor, EU size) → skuId` via Product Feed
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -38,11 +38,11 @@ So that `cartApi.addItem(skuId, ...)` can be called without scraping the size gr
 
 ## Tasks / Subtasks
 
-### Task 1: SDK reuse audit (AC: SDK reuse)
+### Task 1: SDK reuse audit (AC: SDK reuse) [x]
 
 Read `packages/sdk/src/productFeed/*` to confirm the existing public API surface (`getProductFeed`, `formatProductFeedResponse`, `availableCountries`). Document which response field carries the size-to-skuId mapping. If the SDK does not expose the raw `skus[]` array, file a follow-up but DO NOT modify SDK in this story — wrap and parse downstream.
 
-### Task 2: Implement resolver (AC: lookup + size matching)
+### Task 2: Implement resolver (AC: lookup + size matching) [x]
 
 Create `packages/bot/src/checkout/api/skuResolver.ts`:
 
@@ -79,13 +79,13 @@ export const resolveSkuId = async (args: ResolveArgs): Promise<string> => {
 
 The matching function must compare against both `localizedSize` and `nikeSize` (Nike returns both in `skus[]`). Match is case-insensitive, trim whitespace.
 
-### Task 3: In-memory LRU cache (AC: cache TTL)
+### Task 3: In-memory LRU cache (AC: cache TTL) [x]
 
 Add a `SkuCache` class with a 10-minute TTL keyed on `${country}:${styleColor}:${size}`. Use a `Map<string, {skuId: string, expiresAt: number}>` capped at 1000 entries (LRU eviction by insertion order).
 
 Cache invalidation is not needed in this story — the cache is per-process and short-lived; Story 12-9 (error handling) will add invalidation on a `404 from /buy/carts` hint that the skuId went stale.
 
-### Task 4: Multi-country size matcher (AC: US/UK sizing)
+### Task 4: Multi-country size matcher (AC: US/UK sizing) [x]
 
 Create a helper `matchSizeInSkus(skus, size, country)` that:
 - For `country === 'FR'` or `'DE'` or `'IT'`: match `localizedSize === size` (EU sizing).
@@ -94,13 +94,13 @@ Create a helper `matchSizeInSkus(skus, size, country)` that:
 
 Exposed as a separate exported function so Story 13.x (Multi-Country) can extend it for JP / AU later.
 
-### Task 5: Error taxonomy (AC: SkuNotFoundError, StyleColorNotFoundError)
+### Task 5: Error taxonomy (AC: SkuNotFoundError, StyleColorNotFoundError) [x]
 
 Wire both errors into the existing `BlockReason` taxonomy from Epic 5. Add two new outcome reasons:
 - `style_color_not_found` (terminal, no retry, indicates bad CSV input or Nike delisted product)
 - `sku_not_available` (terminal for that size; orchestrator may try fallback sizes per FR15)
 
-### Task 6: Unit tests (AC: all matching paths)
+### Task 6: Unit tests (AC: all matching paths) [x]
 
 Create `packages/bot/src/checkout/api/skuResolver.test.ts` with mocked SDK responses. Cover:
 - Happy path FR EU size → skuId
@@ -111,7 +111,7 @@ Create `packages/bot/src/checkout/api/skuResolver.test.ts` with mocked SDK respo
 - Cache hit on second call within TTL → no second SDK invocation
 - Cache miss after TTL expiry → re-fetches
 
-### Task 7: Live test script (AC: real Nike feed)
+### Task 7: Live test script (AC: real Nike feed) [x]
 
 Add `packages/bot/scripts/live-test-sku-resolver.ts` that calls the SDK against a known stable styleColor (e.g., `CW2288-111` Air Force 1) for sizes 38..46 and prints the skuId map. Used during dev to verify no SDK-side regression.
 
@@ -151,3 +151,31 @@ Files modified:
 - API Reference: `docs/NIKE_API_REFERENCE.md` (line 55 — Product Feed endpoint)
 - SDK: `packages/sdk/src/productFeed/` (existing `getProductFeed`)
 - Story 12.1 (consumer of returned skuId)
+
+## Dev Agent Record
+
+### Agent: claude-sonnet-4-6 — 2026-04-25
+
+**Implementation decisions:**
+- SDK reuse audit: `packages/sdk/productFeed/api.ts` does not expose `productCode` filter — uses `countryCode + language + channelId + upcoming`. Direct `fetch` used instead. SDK types (`SkusOutput`, `ProductFeedOutput`) are reused. Follow-up needed.
+- `fetchProductFeed` exported for test observability (mocking global.fetch boundary).
+- TTL test implemented as direct `SkuCache` unit test (internal store manipulation) rather than `Date.now` patching, avoiding cross-test timing interference in concurrent test runner.
+- `blockReason.ts` already contained `sku_not_available` and `style_color_not_found` — no modification needed.
+- `normalizeSize` handles EU, EUR, UK, US, CM, JP prefix/suffix variants.
+
+**Files created:**
+- `packages/bot/src/checkout/api/skuResolver.ts`
+- `packages/bot/src/checkout/api/skuCache.ts`
+- `packages/bot/src/checkout/api/skuResolver.test.ts`
+- `packages/bot/scripts/live-test-sku-resolver.ts`
+
+**Files modified:**
+- `packages/bot/src/checkout/api/index.ts` — added resolver exports
+
+**Test result:** 272/273 pass (1 pre-existing fail: `completeShipping`). 18/18 new tests pass.
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-04-25 | Initial implementation — all tasks complete, Status: review |

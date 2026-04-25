@@ -39,6 +39,12 @@ export const BotConfigSchema = v.object({
 		}),
 		{ logFile: './logs/bot.log', pidFile: './bot.pid' },
 	),
+	kpsdk: v.optional(
+		v.object({
+			tokenTtlMs: v.optional(v.pipe(v.number(), v.minValue(0)), 600_000),
+		}),
+		{ tokenTtlMs: 600_000 },
+	),
 })
 
 export type BotConfig = v.InferOutput<typeof BotConfigSchema>

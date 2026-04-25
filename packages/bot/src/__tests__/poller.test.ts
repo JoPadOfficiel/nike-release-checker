@@ -92,6 +92,7 @@ describe('poller', () => {
       proxy: { rotationMode: 'per-account' as const, testOnImport: true },
       stealth: { headless: true, userAgent: 'auto' },
       daemon: { logFile: './logs/bot.log', pidFile: './bot.pid' },
+      kpsdk: { tokenTtlMs: 600_000 },
     }
 
     // Mock fetchProductStatus by intercepting the actual network call via signal abort

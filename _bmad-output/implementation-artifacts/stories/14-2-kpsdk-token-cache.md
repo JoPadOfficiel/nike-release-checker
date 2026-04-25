@@ -1,6 +1,6 @@
 # Story 14.2: KPSDK Token In-Memory Cache
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -23,7 +23,7 @@ so that repeated API calls in the same checkout flow don't re-trigger the extrac
 
 ## Tasks / Subtasks
 
-### Task 1: Cache implementation (AC: TTL + key shape)
+### Task 1: Cache implementation (AC: TTL + key shape) [x]
 
 - **File:** `packages/bot/src/stealth/kpsdk/cache.ts` (new)
 
@@ -100,7 +100,7 @@ export class KpsdkCache {
 export const kpsdkCache = new KpsdkCache()
 ```
 
-### Task 2: Refresh helper integrating extractor (AC: refresh re-extracts and updates)
+### Task 2: Refresh helper integrating extractor (AC: refresh re-extracts and updates) [x]
 
 - **File:** `packages/bot/src/stealth/kpsdk/cache.ts` (continue)
 
@@ -122,7 +122,7 @@ export async function refreshKpsdkToken(
 }
 ```
 
-### Task 3: Config wiring (AC: configurable TTL)
+### Task 3: Config wiring (AC: configurable TTL) [x]
 
 - **File:** `packages/bot/src/config/botConfigSchema.ts` (modify)
 - Extend the YAML schema with:
@@ -140,20 +140,20 @@ kpsdk: v.optional(
 - Replace the singleton `new KpsdkCache()` with a factory called from CLI bootstrap that reads config: `export function createKpsdkCache(config: BotConfig): KpsdkCache`
 - Singleton pattern: cache instance attached to a module-level holder set at app boot; tests reset it via `clear()` and a `__resetForTest()` helper
 
-### Task 4: Cache lookup at API call entry (AC: hit before extractor force-fire)
+### Task 4: Cache lookup at API call entry (AC: hit before extractor force-fire) [x]
 
 - **File:** `packages/bot/src/checkout/cartApi.ts` (modify)
 - Before any `page.request.fetch()` to a protected endpoint, the wrapper checks `kpsdkCache.get(accountId, country)` first; if hit, the token is already inside `page.request` (cookies + KPSDK live in the page context) — the cache check is purely an observability + skip-the-force-fire signal
 - If miss, call `refreshKpsdkToken(cache, accountId, country, page)` to force-fire and warm
 - This means the cache primarily serves as a "do I need to force-fire a synthetic request before my real request?" signal, not as a header-injection layer (the page context still owns the header injection)
 
-### Task 5: Stats exposure for observability (AC: stats counters)
+### Task 5: Stats exposure for observability (AC: stats counters) [x]
 
 - **File:** `packages/bot/src/cli/commands.ts` (modify)
 - Add a `nike-bot kpsdk-stats` subcommand that prints `kpsdkCache.stats()` as a table — useful during a drop to verify the cache is doing its job (high hit rate expected after warmup)
 - Document in the command's `--help` text
 
-### Task 6: Unit tests (AC: scenarios listed)
+### Task 6: Unit tests (AC: scenarios listed) [x]
 
 - **File:** `packages/bot/src/stealth/kpsdk/cache.test.ts` (new)
 - Test 1: `get` before any `set` → null + miss++
@@ -203,3 +203,37 @@ Modified files:
 - Architecture: "KPSDK Token Cache" component (Redis in SaaS, in-memory locally)
 - Depends on: Story 14.1 (extractor)
 - Consumed by: Story 14.3 (retry path uses `refreshKpsdkToken`)
+
+## File List
+
+### New Files
+- `packages/bot/src/stealth/kpsdk/cache.ts` — KpsdkCache class, kpsdkCacheHolder singleton, createKpsdkCache factory, refreshKpsdkToken helper
+- `packages/bot/src/stealth/kpsdk/cache.test.ts` — 11 unit tests (9 AC scenarios + 1 bonus + 1 smoke)
+
+### Modified Files
+- `packages/bot/src/config/botConfigSchema.ts` — added `kpsdk.tokenTtlMs` field (default 600_000)
+- `packages/bot/src/checkout/api/cartApi.ts` — added `accountId` param + `ensureKpsdkToken()` pre-flight check
+- `packages/bot/src/cli/commands.ts` — added `kpsdk-stats` subcommand
+- `packages/bot/src/stealth/index.ts` — re-exported KpsdkCache, kpsdkCacheHolder, createKpsdkCache, refreshKpsdkToken
+- `packages/bot/src/__tests__/checkoutPipeline.test.ts` — added `kpsdk` field to MOCK_CONFIG
+- `packages/bot/src/__tests__/poller.test.ts` — added `kpsdk` field to mockConfig
+
+## Dev Agent Record
+
+### Implementation Notes
+
+1. **`erasableSyntaxOnly: true` constraint** — constructor parameter properties (`constructor(private ttlMs)`) are forbidden. Used explicit field declaration + assignment in constructor body.
+
+2. **Singleton pattern** — implemented as `kpsdkCacheHolder` object with a `__resetForTest()` helper. Also exported a `kpsdkCache` Proxy alias for ergonomic access. `createKpsdkCache()` factory is called at CLI bootstrap.
+
+3. **`BotConfig` type impact** — adding `kpsdk` via `v.optional(v.object({...}), default)` makes the field appear in `InferOutput` as required (valibot always provides a default, so the output type is non-optional). Updated 2 test files that manually constructed `BotConfig` objects.
+
+4. **Task 4 / cartApi.ts** — `NikeCartApi` constructor gains an optional `accountId?: string` third parameter (backwards-compatible). When `accountId` is set, each `request()` call checks the cache and calls `refreshKpsdkToken` on miss before the actual fetch. This is a pure observability/skip-force-fire signal — headers are managed by the page context.
+
+5. **No conflict with Story 12.9** — this story only modifies `cartApi.ts` (not `apiErrors.ts`, `withApiRetry.ts`, `errorToBlockReason.ts`, or `kpsdkClient.types.ts`).
+
+## Change Log
+
+| Date | Version | Author | Description |
+|------|---------|--------|-------------|
+| 2026-04-25 | 1.0.0 | Dev Agent | Initial implementation — all 6 tasks complete, 11/11 tests green |

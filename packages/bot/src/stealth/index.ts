@@ -1,4 +1,8 @@
 export { createStealthContext } from './contextFactory.ts'
+export { KpsdkExtractor, getKpsdkExtractor } from './kpsdk/extractor.ts'
+export { isProtectedUrl, PROTECTED_PATTERNS } from './kpsdk/types.ts'
+export type { KpsdkToken } from './kpsdk/types.ts'
+export { KpsdkCache, kpsdkCacheHolder, createKpsdkCache, refreshKpsdkToken } from './kpsdk/cache.ts'
 export { parseProxyUrl, testProxy, maskProxyUrl, formatProxyError } from './proxyValidator.ts'
 export { createCheckoutContext } from './checkoutContext.ts'
 export { buildLocaleConfig } from './localeConfig.ts'

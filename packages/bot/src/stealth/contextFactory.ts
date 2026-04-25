@@ -4,6 +4,20 @@ import type { BrowserContext, BrowserContextOptions } from 'playwright'
 import { maskProxy } from '../logger/credentialMasker.ts'
 import { parseProxyUrl } from './proxyValidator.ts'
 
+// KPSDK Integration note (Story 14.1):
+// After obtaining a Page from this context, callers MUST immediately attach the KPSDK extractor
+// before navigating to any protected endpoint:
+//
+//   import { getKpsdkExtractor } from './kpsdk/extractor.ts'
+//
+//   const context = await createStealthContext(...)
+//   const page = await context.newPage()
+//   // extractor attached before page.goto so the very first protected request fires the listener
+//   getKpsdkExtractor(page, account.country)
+//   await page.goto(pdpUrl)
+//
+// See: packages/bot/src/stealth/kpsdk/extractor.ts
+
 // Register the stealth plugin once at module level — never inside a function.
 // Registering it multiple times causes duplicate plugin warnings and unpredictable behavior.
 // Disable conflicting evasions — we handle these explicitly via context options and addInitScript.

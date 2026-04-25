@@ -107,7 +107,14 @@ export async function launchRealChrome(
       console.log(`  [chrome] Loading ${exts.length} extension(s) from ${extensionsDir}`)
     }
   }
-  if (headless) args.push('--headless=new')
+  if (headless) {
+    args.push('--headless=new')
+    // Override the leaked `HeadlessChrome/...` UA — Kasada/Akamai fingerprints
+    // it within the first request. Mirror a real desktop Chrome on macOS.
+    args.push(
+      '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+    )
+  }
 
   // Spawn Chrome detached from our process
   const chromeProcess: ChildProcess = spawn(chromeBin, args, {

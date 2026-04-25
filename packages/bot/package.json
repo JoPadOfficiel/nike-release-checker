@@ -12,7 +12,7 @@
 	"scripts": {
 		"dev": "node --import tsx --watch src/cli/index.ts",
 		"start": "node --import tsx src/cli/index.ts",
-		"test": "node --import tsx --test 'src/auth/**/*.test.{ts,tsx}' 'src/checkout/**/*.test.{ts,tsx}' 'src/cli/**/*.test.{ts,tsx}' 'src/config/**/*.test.{ts,tsx}' 'src/logger/**/*.test.{ts,tsx}' 'src/monitor/**/*.test.{ts,tsx}' 'src/tui/**/*.test.{ts,tsx}'",
+		"test": "node --import tsx --test 'src/auth/**/*.test.{ts,tsx}' 'src/checkout/**/*.test.{ts,tsx}' 'src/cli/**/*.test.{ts,tsx}' 'src/config/**/*.test.{ts,tsx}' 'src/logger/**/*.test.{ts,tsx}' 'src/monitor/**/*.test.{ts,tsx}' 'src/stealth/**/*.test.{ts,tsx}' 'src/tui/**/*.test.{ts,tsx}'",
 		"test:integration": "node --import tsx --test 'src/__tests__/**/*.test.{ts,tsx}'",
 		"typecheck": "tsc --noEmit"
 	},
