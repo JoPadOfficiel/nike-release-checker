@@ -83,3 +83,12 @@ export type {
 	CartReview,
 } from './reviewApi.types.ts'
 export { computeExpectedTotal } from './expectedTotal.ts'
+export {
+	NikeCheckoutsApi,
+	CheckoutKpsdkBlockedError,
+	CheckoutServerError,
+	CheckoutDeclinedError,
+} from './checkoutsApi.ts'
+export type { CheckoutStatus, CheckoutResponse } from './checkoutsApi.types.ts'
+export { persistReceipt } from './receiptStore.ts'
+export type { Receipt } from './receiptStore.ts'

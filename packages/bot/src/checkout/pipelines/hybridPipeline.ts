@@ -29,12 +29,14 @@ import {
 	NikeFulfillmentApi,
 	NikePaymentApi,
 	NikeReviewApi,
+	NikeCheckoutsApi,
 	generateVisitorId,
 	toNikeAddress,
 	withApiRetry,
 	pickDefaultOffering,
 	pickDefaultPaymentMethod,
 	assertTotalMatches,
+	persistReceipt,
 } from '../api/index.ts'
 import { captureAdyenCard } from '../dom/captureAdyenCard.ts'
 
@@ -293,7 +295,11 @@ export async function runHybridPipeline(
 				step: 'submit',
 				outcome: 'success',
 				durationMs: 0,
-				details: 'dry-run',
+				details: JSON.stringify({
+					skipped: 'dry-run',
+					wouldSubmitCartId: cart.id,
+					wouldSubmitTotal: readyReview.computedTotal?.total,
+				}),
 			})
 			const finalOutcome = classifyOutcome(steps)
 			return {
@@ -305,10 +311,31 @@ export async function runHybridPipeline(
 			}
 		}
 
-		// Story 12.8 will provide NikeCheckoutsApi. For now we record the step as
-		// pending so the pipeline compiles and tests run. The submit import will be
-		// added when 12.8 lands (dynamic import pattern per dev notes).
-		steps.push(ok('submit', `cart_id=${cart.id}`))
+		// ── Step 9 (live): PUT /buy/checkouts/<cartId> ────────────────────────────
+		const checkoutsApi = new NikeCheckoutsApi(page)
+		const submitResp = await withApiRetry(
+			() => checkoutsApi.submit(cart.id),
+			{ ...retryBase, step: 'submit-checkout', idempotent: true },
+		)
+
+		// Persist PII-redacted receipt (mode 0o600, no address/card fields).
+		const dataDir = config.daemon?.pidFile
+			? config.daemon.pidFile.replace(/\/[^/]+$/, '')
+			: '.'
+		const receiptPath = await persistReceipt(dataDir, account.id, cart.id, submitResp)
+		console.log(`[checkout] receipt persisted: ${receiptPath}`)
+
+		// Log auditable transaction signal (NOT the full Nike response — may contain transient tokens).
+		console.log(JSON.stringify({
+			event: 'cop',
+			accountId: account.id,
+			orderNumber: submitResp.orderNumber,
+			totalAmount: submitResp.totalAmount,
+			currency: submitResp.currency,
+			receiptPath,
+		}))
+
+		steps.push(ok('submit', `order=${submitResp.orderNumber}`))
 
 		// ── Step 10: DOM (reactive) — 3DS challenge ───────────────────────────────
 		const threeDSStepResult = await handle3DSIfRequired(page, selectors, stepTimeoutMs)

@@ -21,6 +21,7 @@ import { FulfillmentJobTimeoutError, FulfillmentJobFailedError, NoFulfillmentOff
 import { NoPaymentMethodError, PaymentApiAuthError } from './paymentApi.ts'
 import { TotalMismatchError, ReviewTimeoutError, ReviewError } from './reviewApi.ts'
 import { SkuNotFoundError, StyleColorNotFoundError } from './skuResolver.ts'
+import { CheckoutKpsdkBlockedError, CheckoutServerError, CheckoutDeclinedError } from './checkoutsApi.ts'
 
 export const errorToBlockReason = (e: unknown): BlockReason => {
 	// --- Envelope-level errors (Story 12.9) ---
@@ -56,9 +57,10 @@ export const errorToBlockReason = (e: unknown): BlockReason => {
 	if (e instanceof SkuNotFoundError) return 'sku_not_available'
 	if (e instanceof StyleColorNotFoundError) return 'style_color_not_found'
 
-	// TODO(Story 12.6): CheckoutKpsdkBlockedError → 'blocked'
-	// TODO(Story 12.6): CheckoutServerError → 'submit_failed'
-	// TODO(Story 12.6): CheckoutDeclinedError → 'payment_declined'
+	// --- Checkouts / submit (Story 12.8) ---
+	if (e instanceof CheckoutKpsdkBlockedError) return 'blocked'
+	if (e instanceof CheckoutServerError) return 'submit_failed'
+	if (e instanceof CheckoutDeclinedError) return 'payment_declined'
 
 	return 'unknown_error'
 }
