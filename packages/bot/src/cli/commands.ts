@@ -784,7 +784,7 @@ program
 				// 4. For each drop row → run pipeline + render Dashboard live
 				for (const drop of dropParse.drops) {
 					const accountIds = resolveAccountsFilter(
-						drop.accounts_filter,
+						drop.accountsFilter,
 						allIds,
 						validSessionIds,
 					)

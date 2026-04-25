@@ -1,17 +1,31 @@
 import { readCsvRows, type CsvIssue } from './csvRead.ts'
+import { countryRegistry } from '../country/registry.ts'
+import { normalizeCountryCode } from '../country/normalize.ts'
 
 export type AccountsFilter =
 	| { kind: 'all' }
 	| { kind: 'explicit'; ids: string[] }
 
+export type Drop = {
+	sku: string
+	sizes: string[]
+	accountsFilter: AccountsFilter
+	country: string // always populated post-parse — defaults already applied
+}
+
+/**
+ * @deprecated Use Drop instead. Kept for backward compat with callers that
+ * still use `accounts_filter` (snake_case). Will be removed in next major.
+ */
 export type DropRow = {
 	sku: string
 	sizes: string[]
 	accounts_filter: AccountsFilter
+	country: string
 }
 
 export type DropParseResult = {
-	drops: DropRow[]
+	drops: Drop[]
 	errors: CsvIssue[]
 	warnings: CsvIssue[]
 }
@@ -21,9 +35,10 @@ const SKU_RE = /^[A-Z0-9]{2,6}-?\d{3,4}$/ // tolerant — Nike formats vary
 export async function parseDropCsv(
 	filePath: string,
 	knownAccountIds: Set<string>,
+	defaultCountry = 'FR',
 ): Promise<DropParseResult> {
 	const { rows, parseErrors, rowToSourceLine } = await readCsvRows(filePath)
-	const drops: DropRow[] = []
+	const drops: Drop[] = []
 	const errors: CsvIssue[] = [...parseErrors]
 	const warnings: CsvIssue[] = []
 	const seenSkus = new Set<string>()
@@ -34,6 +49,7 @@ export async function parseDropCsv(
 		const sizesRaw = raw.sizes ?? ''
 		const sizes = sizesRaw.split(';').map((s) => s.trim()).filter(Boolean)
 		const filterRaw = (raw.accounts_filter ?? '').trim()
+		const countryRaw = (raw.country ?? '').trim()
 
 		if (!sku) {
 			errors.push({
@@ -62,9 +78,9 @@ export async function parseDropCsv(
 			return
 		}
 
-		let accounts_filter: AccountsFilter
+		let accountsFilter: AccountsFilter
 		if (filterRaw === 'all' || filterRaw === '') {
-			accounts_filter = { kind: 'all' }
+			accountsFilter = { kind: 'all' }
 		} else {
 			const ids = filterRaw.split(';').map((s) => s.trim()).filter(Boolean)
 			const unknown = ids.filter((id) => !knownAccountIds.has(id))
@@ -77,7 +93,39 @@ export async function parseDropCsv(
 				})
 				return
 			}
-			accounts_filter = { kind: 'explicit', ids }
+			accountsFilter = { kind: 'explicit', ids }
+		}
+
+		// Country resolution
+		const rawInput = countryRaw === '' ? defaultCountry : countryRaw
+		const normalized = normalizeCountryCode(rawInput)
+
+		// Lookup in registry — distinguish disabled vs unknown
+		const entry = (() => {
+			try {
+				return countryRegistry.get(normalized)
+			} catch {
+				return undefined
+			}
+		})()
+
+		if (entry === undefined) {
+			errors.push({
+				row: rowNum,
+				column: 'country',
+				value: normalized,
+				message: `row ${rowNum}: unknown country code \`${normalized}\` (see \`nike-bot countries\` for supported list)`,
+			})
+			return
+		}
+		if (!entry.enabled) {
+			errors.push({
+				row: rowNum,
+				column: 'country',
+				value: normalized,
+				message: `row ${rowNum}: country \`${normalized}\` is in registry but disabled in v3.0 (enable it via Story 13.x)`,
+			})
+			return
 		}
 
 		if (seenSkus.has(sku)) {
@@ -89,7 +137,7 @@ export async function parseDropCsv(
 			})
 		}
 		seenSkus.add(sku)
-		drops.push({ sku, sizes, accounts_filter })
+		drops.push({ sku, sizes, accountsFilter, country: normalized })
 	})
 
 	return { drops, errors, warnings }
@@ -100,9 +148,18 @@ export function resolveAccountsFilter(
 	filter: AccountsFilter,
 	allAccountIds: string[],
 	validSessionIds: Set<string>,
+	dropCountry?: string,
+	accountCountries?: Map<string, string>,
 ): string[] {
 	if (filter.kind === 'all') {
-		return allAccountIds.filter((id) => validSessionIds.has(id))
+		return allAccountIds.filter((id) => {
+			if (!validSessionIds.has(id)) return false
+			// Country-scoped: when accounts_filter=all, only include accounts matching drop country
+			if (dropCountry !== undefined && accountCountries !== undefined) {
+				return accountCountries.get(id) === dropCountry
+			}
+			return true
+		})
 	}
 	return filter.ids.filter((id) => validSessionIds.has(id))
 }

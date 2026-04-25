@@ -31,6 +31,9 @@ function mkDeps(overrides: Partial<WarmupDeps> = {}): WarmupDeps {
 		sleep: async () => {
 			/* instant for tests */
 		},
+		preloadSelectors: async () => {
+			/* no-op in tests */
+		},
 		...overrides,
 	}
 }

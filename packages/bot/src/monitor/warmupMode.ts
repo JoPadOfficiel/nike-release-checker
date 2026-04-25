@@ -5,6 +5,7 @@ import {
 	createCheckoutContext,
 	type CheckoutContextHandle,
 } from '../checkout/checkoutPipeline.ts'
+import { loadSelectorsForCountry } from '../country/selectorLoader.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import type { BotConfig } from '../config/botConfigSchema.ts'
 
@@ -67,6 +68,8 @@ export interface WarmupDeps {
 	validateSessionStatus: (accountId: string) => Promise<boolean>
 	createCheckoutContext: (account: AccountConfig) => Promise<PreparedCheckoutContext>
 	sleep: (ms: number, signal: AbortSignal) => Promise<void>
+	/** Eagerly warm the selector cache for a country code. */
+	preloadSelectors: (countryCode: string) => Promise<void>
 }
 
 const defaultDeps: WarmupDeps = {
@@ -77,6 +80,9 @@ const defaultDeps: WarmupDeps = {
 		return r.status === 'valid'
 	},
 	createCheckoutContext: (account) => createCheckoutContext(account),
+	preloadSelectors: async (cc) => {
+		await loadSelectorsForCountry(cc)
+	},
 	sleep: (ms, signal) =>
 		new Promise<void>((resolve) => {
 			if (signal.aborted) {
@@ -186,6 +192,16 @@ export class WarmupController {
 			tMinusSeconds: tMinus(),
 			sessionsTotal: validAccounts.length,
 		})
+
+		// Eagerly pre-resolve selectors for every unique country in this drop's
+		// account set. Cache hits at T=0 mean zero IO overhead during checkout.
+		// For v3.0 (FR-only) this is a single call; future multi-country drops
+		// benefit automatically.
+		const uniqueCountries = [...new Set(validAccounts.map((a) => a.country))]
+		await Promise.all(
+			uniqueCountries.map((cc) => this.deps.preloadSelectors(cc)),
+		)
+
 		for (const a of validAccounts) {
 			if (this.abort.signal.aborted) break
 			const ctx = await this.deps.createCheckoutContext(a)
