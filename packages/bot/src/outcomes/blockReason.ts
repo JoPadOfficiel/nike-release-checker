@@ -21,6 +21,7 @@ export type BlockReason =
 	| 'payment_declined'
 	// Review / submit
 	| 'total_mismatch'
+	| 'review_timeout'
 	| 'review_failed'
 	| 'submit_failed'
 	// Product availability
