@@ -13,15 +13,20 @@ export async function completeShipping(
     async () => {
       // Wait for shipping continue button to be ready
       // Use shorter timeout than the executeStep race timer to avoid ghost timeout
-      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.6), 2000)
       await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: innerTimeout })
 
-      const shippingButton = page.locator(selectors.checkout.shippingContinueButton)
-      const isVisible = await shippingButton.isVisible()
-      const isEnabled = await shippingButton.isEnabled()
+      // Pick the first matching button (Nike checkout has multiple submit buttons,
+      // text-matches may catch "Modifier" / "Confirmer" etc. — first() narrows to one).
+      const shippingButton = page.locator(selectors.checkout.shippingContinueButton).first()
 
-      if (!isVisible || !isEnabled) {
-        throw Object.assign(new Error('Shipping continue button not ready'), { code: 'TIMEOUT' })
+      // Hydration buffer: Nike's React form re-renders after waitForSelector returns,
+      // and isVisible/isEnabled fail immediately on the brief intermediate state.
+      // Use locator's auto-wait via waitFor instead of polling isVisible/isEnabled.
+      try {
+        await shippingButton.waitFor({ state: 'visible', timeout: innerTimeout })
+      } catch {
+        throw Object.assign(new Error('Shipping continue button not visible'), { code: 'TIMEOUT' })
       }
 
       await naturalClick(page, shippingButton)
