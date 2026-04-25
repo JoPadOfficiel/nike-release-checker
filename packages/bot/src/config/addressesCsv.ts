@@ -15,6 +15,19 @@ const OptionalCsvString = v.pipe(
 
 export const AddressRowSchema = v.object({
 	account_id: v.pipe(v.string(), v.minLength(1, 'account_id required')),
+	// Nike checkout requires first/last name + email — added as optional in the
+	// schema so legacy CSVs (street/city/zip/country/phone only) still parse,
+	// but consumers (cartViewsApi.openShippingView) will fail-fast at runtime
+	// if absent. New CSVs should populate them.
+	firstName: v.optional(
+		v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+	),
+	lastName: v.optional(
+		v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+	),
+	email: v.optional(
+		v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+	),
 	street: v.pipe(v.string(), v.minLength(1, 'street required')),
 	city: v.pipe(v.string(), v.minLength(1, 'city required')),
 	zip: v.pipe(v.string(), v.minLength(1, 'zip required')),
@@ -28,6 +41,15 @@ export const AddressRowSchema = v.object({
 function buildCountryAwareSchema(countryCode: string) {
 	return v.object({
 		account_id: v.pipe(v.string(), v.minLength(1, 'account_id required')),
+		firstName: v.optional(
+			v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+		),
+		lastName: v.optional(
+			v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+		),
+		email: v.optional(
+			v.pipe(OptionalCsvString, v.union([v.undefined(), v.string()])),
+		),
 		street: v.pipe(v.string(), v.minLength(1, 'street required')),
 		city: v.pipe(v.string(), v.minLength(1, 'city required')),
 		zip: zipSchema(countryCode),
