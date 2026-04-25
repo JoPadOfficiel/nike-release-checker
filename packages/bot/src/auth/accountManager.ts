@@ -211,14 +211,14 @@ export async function authenticateSingle(accountId: string): Promise<AuthResult>
 
 export function formatImportSummary(
 	result: ImportResult,
-	accounts: Array<{ id: string; email: string; proxy: string }>,
+	accounts: Array<{ id: string; email: string; proxy?: string }>,
 ): string[] {
 	const lines: string[] = []
 
 	for (const account of accounts) {
 		const failure = result.errors.find((e) => e.accountId === account.id)
 		const masked = maskEmail(account.email)
-		const maskedProxy = maskProxy(account.proxy)
+		const maskedProxy = account.proxy ? maskProxy(account.proxy) : '(none)'
 		if (failure) {
 			lines.push(`  ✗ ${masked} (proxy: ${maskedProxy}) — ${failure.reason}`)
 		} else {

@@ -495,7 +495,7 @@ cards
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		try {
 			const passphrase = await promptPassphrase('Passphrase: ')
-			const { key } = initWithPassphrase(passphrase)
+			const { key } = await initWithPassphrase(passphrase)
 			const result = await importCardsCsv(opts.file, key)
 			if (result.errors.length > 0) {
 				console.error(`❌ Import aborted — ${result.errors.length} validation error(s):`)
@@ -543,7 +543,7 @@ cards
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		try {
 			const passphrase = await promptPassphrase('Passphrase: ')
-			const { key } = initWithPassphrase(passphrase)
+			const { key } = await initWithPassphrase(passphrase)
 			cardsKey = key
 			console.log('✓ Cards DB unlocked for this session.')
 		} catch (err) {

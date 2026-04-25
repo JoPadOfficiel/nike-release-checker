@@ -15,6 +15,7 @@ import { completeShipping } from './steps/completeShipping.ts'
 import { completePayment } from './steps/completePayment.ts'
 import { handle3DSIfRequired } from './steps/handle3DS.ts'
 import { submitOrder } from './steps/submitOrder.ts'
+import { globalBus } from '../tui/eventBus.ts'
 
 export interface CheckoutPipelineResult {
   accountId: string
@@ -76,6 +77,10 @@ export async function runCheckoutPipeline(
     const steps: StepResult[] = []
 
     // Step 1: Select size
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'selectSize' },
+    })
     const sizeResult = await selectSize(page, productUrl, targetSizes, selectors, stepTimeoutMs)
     steps.push(sizeResult)
     logStep(account.email, sizeResult)
@@ -85,6 +90,10 @@ export async function runCheckoutPipeline(
     }
 
     // Step 2: Add to cart
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'addToCart' },
+    })
     const cartResult = await addToCart(page, selectors, stepTimeoutMs)
     steps.push(cartResult)
     logStep(account.email, cartResult)
@@ -94,6 +103,10 @@ export async function runCheckoutPipeline(
     }
 
     // Step 3: Navigate to checkout
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'navigateCheckout' },
+    })
     const navResult = await navigateCheckout(page, selectors, stepTimeoutMs)
     steps.push(navResult)
     logStep(account.email, navResult)
@@ -103,6 +116,10 @@ export async function runCheckoutPipeline(
     }
 
     // Step 4: Complete shipping
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'completeShipping' },
+    })
     const shippingResult = await completeShipping(page, selectors, stepTimeoutMs)
     steps.push(shippingResult)
     logStep(account.email, shippingResult)
@@ -112,6 +129,10 @@ export async function runCheckoutPipeline(
     }
 
     // Step 5: Complete payment
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: 'completePayment' },
+    })
     const paymentResult = await completePayment(page, selectors, stepTimeoutMs)
     steps.push(paymentResult)
     logStep(account.email, paymentResult)
@@ -136,6 +157,10 @@ export async function runCheckoutPipeline(
     }
 
     // Step 6: Submit order (dry-run aware)
+    globalBus.emit('accountStatusChanged', {
+      accountId: account.id,
+      status: { kind: 'waiting', step: dryRun ? 'dryRun' : 'submitOrder' },
+    })
     const submitResult = await submitOrder(page, selectors, dryRun, stepTimeoutMs)
     steps.push(submitResult)
     logStep(account.email, submitResult)

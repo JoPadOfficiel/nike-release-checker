@@ -13,7 +13,7 @@ export interface ImportResult {
 	imported: number
 	failed: number // schema-invalid + dedup-skipped + proxy-failed (all non-imported)
 	errors: AccountImportError[]
-	processedAccounts: Array<{ id: string; email: string; proxy: string }>
+	processedAccounts: Array<{ id: string; email: string; proxy?: string }>
 }
 
 export interface LoginResult {
@@ -44,7 +44,7 @@ export interface AccountStatusRow {
 	id: string
 	email: string
 	country: string
-	proxy: string
+	proxy?: string
 	session: SessionValidationResult
 	preferredSizes?: string[]
 }

@@ -52,10 +52,10 @@ function openDb(): Database.Database {
  * decrypt the canary. Failure (authTag mismatch) indicates the wrong
  * passphrase — we throw a clean error.
  */
-export function initWithPassphrase(
+export async function initWithPassphrase(
 	passphrase: string,
 	overridePath?: string,
-): { salt: Buffer; key: Buffer } {
+): Promise<{ salt: Buffer; key: Buffer }> {
 	const db = overridePath ? openDbAt(overridePath) : openDb()
 	try {
 		const saltRow = db.prepare(`SELECT v FROM meta WHERE k = 'salt'`).get() as
@@ -79,13 +79,19 @@ export function initWithPassphrase(
 			db.prepare(`INSERT INTO meta (k, v) VALUES ('canary', ?)`).run(blob)
 		} else {
 			const blob = Buffer.from(canaryRow.v)
+			let canaryOk = false
 			try {
 				const iv = blob.subarray(0, 12)
 				const tag = blob.subarray(12, 28)
 				const ct = blob.subarray(28)
 				const pt = decrypt(ct, iv, tag, key)
-				if (pt !== CANARY_PLAINTEXT) throw new Error('canary mismatch')
+				canaryOk = pt === CANARY_PLAINTEXT
 			} catch {
+				canaryOk = false
+			}
+			if (!canaryOk) {
+				// Rate-limit brute-force attempts: pause before surfacing the error.
+				await new Promise((r) => setTimeout(r, 3000))
 				throw new Error('Wrong passphrase')
 			}
 		}

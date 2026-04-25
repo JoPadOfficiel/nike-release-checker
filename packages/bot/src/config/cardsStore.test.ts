@@ -17,10 +17,10 @@ async function withTempDir(fn: (dir: string) => Promise<void>) {
 test('canary validates the correct passphrase on re-open', async () => {
 	await withTempDir(async (dir) => {
 		const db = join(dir, 'cards.db')
-		const first = initWithPassphrase('super-secret', db)
+		const first = await initWithPassphrase('super-secret', db)
 		assert.equal(first.key.length, 32)
 		// Re-open with same passphrase — should not throw.
-		const second = initWithPassphrase('super-secret', db)
+		const second = await initWithPassphrase('super-secret', db)
 		assert.ok(first.key.equals(second.key), 'derived key should match')
 	})
 })
@@ -28,8 +28,21 @@ test('canary validates the correct passphrase on re-open', async () => {
 test('canary rejects a wrong passphrase', async () => {
 	await withTempDir(async (dir) => {
 		const db = join(dir, 'cards.db')
-		initWithPassphrase('correct-pass', db)
-		assert.throws(() => initWithPassphrase('wrong-pass', db), /Wrong passphrase/)
+		await initWithPassphrase('correct-pass', db)
+		await assert.rejects(() => initWithPassphrase('wrong-pass', db), /Wrong passphrase/)
+	})
+})
+
+test('wrong passphrase is rate-limited (~3s) to slow brute-force attempts', async () => {
+	await withTempDir(async (dir) => {
+		const db = join(dir, 'cards.db')
+		await initWithPassphrase('correct-pass', db)
+		const t0 = Date.now()
+		await assert.rejects(() => initWithPassphrase('wrong-pass', db), /Wrong passphrase/)
+		assert.ok(
+			Date.now() - t0 >= 2500,
+			`expected wrong-passphrase reject to take >=2500ms, took ${Date.now() - t0}ms`,
+		)
 	})
 })
 
@@ -46,7 +59,7 @@ test('import transaction inserts all rows and renames source to .imported', asyn
 			'kev_005,4555555555555555,01/31,555,Kevin Five\n'
 		await writeFile(csv, content, 'utf8')
 
-		const { key } = initWithPassphrase('pw', db)
+		const { key } = await initWithPassphrase('pw', db)
 		const result = await importCardsCsv(csv, key, db)
 		assert.equal(result.errors.length, 0)
 		assert.equal(result.imported, 5)
@@ -80,7 +93,7 @@ test('raw DB file does not contain the plaintext card number (encryption sanity)
 				`sanity_001,${PAN},09/27,123,Sanity Check\n`,
 			'utf8',
 		)
-		const { key } = initWithPassphrase('pw', db)
+		const { key } = await initWithPassphrase('pw', db)
 		await importCardsCsv(csv, key, db)
 
 		const raw = await readFile(db)
@@ -103,7 +116,7 @@ test('import rolls back the transaction on failure (all-or-nothing)', async () =
 				'dup_001,4222222222222,10/28,456,Ok Two\n',
 			'utf8',
 		)
-		const { key } = initWithPassphrase('pw', db)
+		const { key } = await initWithPassphrase('pw', db)
 		const result = await importCardsCsv(csv, key, db)
 		assert.equal(result.imported, 0)
 		assert.ok(result.errors.length > 0)
@@ -114,11 +127,11 @@ test('import rolls back the transaction on failure (all-or-nothing)', async () =
 test('resetDb moves the db aside so a new passphrase can be set', async () => {
 	await withTempDir(async (dir) => {
 		const db = join(dir, 'cards.db')
-		initWithPassphrase('first-pass', db)
+		await initWithPassphrase('first-pass', db)
 		const backup = resetDb(db)
 		assert.ok(backup, 'backup path returned')
 		// New init with different passphrase succeeds (fresh salt + canary).
-		const { key } = initWithPassphrase('new-pass', db)
+		const { key } = await initWithPassphrase('new-pass', db)
 		assert.equal(key.length, 32)
 	})
 })
