@@ -68,6 +68,16 @@ function makeMockPage(scenario: Scenario): Page {
       }
       return null
     },
+    frameLocator: (_sel: string) => ({
+      first: () => ({
+        locator: (_s: string) => ({
+          first: () => ({
+            isVisible: async () => false,
+            inputValue: async () => '',
+          }),
+        }),
+      }),
+    }),
   } as unknown as Page
 }
 
@@ -98,7 +108,7 @@ describe('completePayment', () => {
   })
 
   it('returns timeout when payment section selector times out', async () => {
-    const result = await completePayment(makeMockPage('timeout'), BASE_SELECTORS, 500)
+    const result = await completePayment(makeMockPage('timeout'), BASE_SELECTORS, { timeoutMs: 500 })
     assert.equal(result.outcome, 'timeout')
   })
 })

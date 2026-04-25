@@ -81,12 +81,12 @@ describe('completeShipping', () => {
   })
 
   it('returns timeout when shipping button selector does not appear', async () => {
-    const result = await completeShipping(makeMockPage('timeout-shipping'), BASE_SELECTORS, 500)
+    const result = await completeShipping(makeMockPage('timeout-shipping'), BASE_SELECTORS, { timeoutMs: 500 })
     assert.equal(result.outcome, 'timeout')
   })
 
   it('returns timeout when payment section does not appear after clicking', async () => {
-    const result = await completeShipping(makeMockPage('timeout-payment'), BASE_SELECTORS, 500)
+    const result = await completeShipping(makeMockPage('timeout-payment'), BASE_SELECTORS, { timeoutMs: 500 })
     assert.equal(result.outcome, 'timeout')
   })
 })

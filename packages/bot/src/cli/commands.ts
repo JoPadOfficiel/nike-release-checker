@@ -379,12 +379,16 @@ program
 	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
 	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
 	.option('--url <url>', 'Full product URL (overrides slug-based URL)')
-	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string; url?: string }) => {
+	.option('--addresses-csv <path>', 'Path to addresses.csv', './addresses.csv')
+	.option('--unlock-cards', 'Decrypt the card from cards.db (prompts for passphrase)', false)
+	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string; url?: string; addressesCsv: string; unlockCards?: boolean }) => {
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		const { loadStoredAccounts } = await import('../auth/accountManager.ts')
 		const { loadBotConfig } = await import('../config/botConfig.ts')
 		const { loadSelectors } = await import('../config/selectors.ts')
 		const { runCheckoutPipeline } = await import('../checkout/checkoutPipeline.ts')
+		const { parseAddressesCsv } = await import('../config/addressesCsv.ts')
+		const { existsSync } = await import('node:fs')
 		const configPath = program.opts<{ config: string }>().config
 		try {
 			const accounts = await loadStoredAccounts()
@@ -397,11 +401,61 @@ program
 			const selectors = await loadSelectors(opts.selectors)
 			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : account.preferredSizes ?? []
 			const productUrl = opts.url ?? `https://www.nike.com/fr/launch/t/${opts.slug}`
+
+			// 1. Load shipping address from addresses.csv (if file exists).
+			let shippingAddress: { street: string; city: string; zip: string; country: string; phone?: string } | undefined
+			if (existsSync(opts.addressesCsv)) {
+				const knownIds = new Set([account.id])
+				const accCountries = new Map([[account.id, account.country]])
+				const parsed = await parseAddressesCsv(opts.addressesCsv, knownIds, accCountries)
+				if (parsed.errors.length > 0) {
+					console.error(`❌ addresses.csv has ${parsed.errors.length} error(s):`)
+					for (const e of parsed.errors) console.error(`  row ${e.row} [${e.column}]: ${e.message}`)
+					process.exit(1)
+				}
+				const addr = parsed.byAccountId.get(account.id)
+				if (addr) {
+					shippingAddress = {
+						street: addr.street,
+						city: addr.city,
+						zip: addr.zip,
+						country: addr.country,
+						phone: addr.phone,
+					}
+					console.log(`[DRY-RUN] Loaded shipping address for ${account.id} from ${opts.addressesCsv}`)
+				} else {
+					console.log(`[DRY-RUN] No address row for ${account.id} in ${opts.addressesCsv} — will rely on Nike profile fallback`)
+				}
+			}
+
+			// 2. Optionally unlock the cards DB and pull this account's card.
+			let card: { number: string; expiry: string; cvv: string; holderName: string } | undefined
+			if (opts.unlockCards) {
+				const { promptPassphrase } = await import('./prompts.ts')
+				const { initWithPassphrase, getCard } = await import('../config/cardsStore.ts')
+				const passphrase = await promptPassphrase('Cards DB passphrase: ')
+				const { key } = await initWithPassphrase(passphrase)
+				const row = getCard(account.id, key)
+				if (!row) {
+					console.error(`❌ No card stored for account '${account.id}'. Run 'nike-bot cards import' first.`)
+					process.exit(1)
+				}
+				card = {
+					number: row.card_number,
+					expiry: row.expiry,
+					cvv: row.cvv,
+					holderName: row.holder_name,
+				}
+				console.log(`[DRY-RUN] Unlocked card for ${account.id} (holder: ${maskCredentials(row.holder_name)})`)
+			}
+
 			console.log(`[DRY-RUN] Starting dry-run for ${opts.url ? `URL: ${opts.url}` : `slug: ${opts.slug}`}`)
 			const result = await runCheckoutPipeline(account, config, selectors, {
 				productUrl,
 				targetSizes,
 				dryRun: true,
+				shippingAddress,
+				card,
 			})
 			console.log(`[DRY-RUN] Result: ${result.finalOutcome} (${result.durationMs}ms)`)
 			for (const step of result.steps) {

@@ -13,8 +13,8 @@ import { classifyOutcome, type FinalOutcome } from './outcomeClassifier.ts'
 import { selectSize } from './steps/selectSize.ts'
 import { addToCart } from './steps/addToCart.ts'
 import { navigateCheckout } from './steps/navigateCheckout.ts'
-import { completeShipping } from './steps/completeShipping.ts'
-import { completePayment } from './steps/completePayment.ts'
+import { completeShipping, type ShippingAddress } from './steps/completeShipping.ts'
+import { completePayment, type CardData } from './steps/completePayment.ts'
 import { handle3DSIfRequired } from './steps/handle3DS.ts'
 import { submitOrder } from './steps/submitOrder.ts'
 import { globalBus } from '../tui/eventBus.ts'
@@ -31,6 +31,17 @@ export interface CheckoutPipelineOptions {
   productUrl: string
   targetSizes: string[]
   dryRun?: boolean
+  /**
+   * Pre-resolved shipping address — caller (CLI) reads from addresses.csv.
+   * Optional: when omitted and the form is empty, completeShipping returns an
+   * error outcome rather than guessing.
+   */
+  shippingAddress?: ShippingAddress
+  /**
+   * Pre-decrypted card payload — caller (CLI) unlocks the cards DB and pulls
+   * the row before invoking. Optional for the same reason as shippingAddress.
+   */
+  card?: CardData
 }
 
 /**
@@ -90,7 +101,7 @@ export async function runCheckoutPipeline(
   const pipelineStart = performance.now()
   const maskedEmail = maskEmail(account.email)
   const stepTimeoutMs = config.checkout?.stepTimeoutMs ?? 8000
-  const { productUrl, targetSizes, dryRun = false } = options
+  const { productUrl, targetSizes, dryRun = false, shippingAddress, card } = options
 
   console.log(`[checkout] Starting pipeline for ${maskedEmail}${dryRun ? ' [DRY-RUN]' : ''}`)
 
@@ -167,7 +178,7 @@ export async function runCheckoutPipeline(
       accountId: account.id,
       status: { kind: 'waiting', step: 'completeShipping' },
     })
-    const shippingResult = await completeShipping(page, selectors, stepTimeoutMs)
+    const shippingResult = await completeShipping(page, selectors, { timeoutMs: stepTimeoutMs, address: shippingAddress })
     steps.push(shippingResult)
     logStep(account.email, shippingResult)
     printStepResult(shippingResult)
@@ -180,7 +191,7 @@ export async function runCheckoutPipeline(
       accountId: account.id,
       status: { kind: 'waiting', step: 'completePayment' },
     })
-    const paymentResult = await completePayment(page, selectors, stepTimeoutMs)
+    const paymentResult = await completePayment(page, selectors, { timeoutMs: stepTimeoutMs, card })
     steps.push(paymentResult)
     logStep(account.email, paymentResult)
     printStepResult(paymentResult)
