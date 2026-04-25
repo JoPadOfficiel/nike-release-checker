@@ -13,6 +13,8 @@ export const CountrySchema = v.object({
 	adyenIframeLocale: v.pipe(v.string(), v.regex(/^[a-z]{2}_[A-Z]{2}$/)),
 	selectorOverridePath: v.nullable(v.string()),
 	enabled: v.boolean(),
+	description: v.optional(v.string()),
+	feedSupported: v.optional(v.boolean()),
 })
 
 export type Country = v.InferOutput<typeof CountrySchema>
