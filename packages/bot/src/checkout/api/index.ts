@@ -23,3 +23,34 @@ export type { RetryContext } from './withApiRetry.ts'
 export { errorToBlockReason } from './errorToBlockReason.ts'
 export type { KpsdkClient } from './kpsdkClient.types.ts'
 export { stubKpsdkClient } from './kpsdkClient.types.ts'
+export {
+	NikeCartViewsApi,
+	CartViewTimeoutError,
+	CartViewError,
+	CartViewApiError,
+	defaultUuidGen,
+} from './cartViewsApi.ts'
+export type { UuidGen } from './cartViewsApi.ts'
+export type {
+	CartViewType,
+	CartViewStatus,
+	NikeAddress,
+	CartView,
+} from './cartViewsApi.types.ts'
+export { toNikeAddress } from './addressMapper.ts'
+export type { CheckoutAddress } from './addressMapper.ts'
+export {
+	NikeFulfillmentApi,
+	pickDefaultOffering,
+	buildFilterQuery,
+	FulfillmentJobFailedError,
+	FulfillmentJobTimeoutError,
+	NoFulfillmentOfferingError,
+	FulfillmentApiError,
+} from './fulfillmentApi.ts'
+export type {
+	FulfillmentType,
+	JobStatus,
+	FulfillmentOffering,
+	PricingJob,
+} from './fulfillmentApi.types.ts'
