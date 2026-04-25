@@ -54,3 +54,32 @@ export type {
 	FulfillmentOffering,
 	PricingJob,
 } from './fulfillmentApi.types.ts'
+export {
+	NikePaymentApi,
+	pickDefaultPaymentMethod,
+	NoPaymentMethodError,
+	PaymentApiAuthError,
+	PaymentApiError,
+} from './paymentApi.ts'
+export type {
+	PaymentMethod,
+	PaymentMethodType,
+	ListOptionsArgs,
+} from './paymentApi.types.ts'
+export {
+	NikeReviewApi,
+	assertTotalMatches,
+	TotalMismatchError,
+	ReviewTimeoutError,
+	ReviewError,
+	ReviewApiError,
+	defaultUuidGen as defaultReviewUuidGen,
+} from './reviewApi.ts'
+export type { UuidGen as ReviewUuidGen } from './reviewApi.ts'
+export type {
+	ReviewStatus,
+	ComputedTotal,
+	ReviewLineItem,
+	CartReview,
+} from './reviewApi.types.ts'
+export { computeExpectedTotal } from './expectedTotal.ts'

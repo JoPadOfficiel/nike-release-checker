@@ -85,6 +85,13 @@ export class NikeCartViewsApi {
 		this.uuidGen = uuidGen
 	}
 
+	// Merges a partial patch into an existing view via PUT.
+	// Used by Story 12.5 (NikePaymentApi.bindPaymentMethod) to set selectedPaymentMethod.
+	// PUT /buy/cart_views/v1/<viewId> with the given patch body.
+	async mergeView(viewId: string, patch: Record<string, unknown>): Promise<CartView> {
+		return this.put(viewId, patch)
+	}
+
 	// Opens a shipping view for the given cartId. Generates a fresh client-side
 	// viewUuid per call (Nike allocates the resource on first PUT).
 	async openShippingView(cartId: string, address: NikeAddress): Promise<CartView> {

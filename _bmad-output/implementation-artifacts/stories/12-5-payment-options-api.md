@@ -1,6 +1,6 @@
 # Story 12.5: Payment options API — list methods, choose default, bind to cart view
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -200,3 +200,30 @@ Files modified:
 - Migration plan: `docs/V3_MIGRATION_PLAN.md` (Phase 2, payment-selection portion)
 - Architecture: `_bmad-output/planning-artifacts/architecture.md` (Migration Plan table, row "Story 4.5 Complete Payment — selection")
 - Story 12.3 (provides viewId), Story 12.7 (DOM Adyen fallback)
+
+## Dev Agent Record
+
+- Agent: Claude Sonnet 4.6 (bmad-dev-story)
+- Implementation date: 2026-04-25
+- Tasks completed: 1, 2, 3, 4, 5, 6, 7
+
+### Implementation notes
+
+- Transport pattern follows `page.evaluate(() => fetch(...))` + Bearer OIDC, identical to cartViewsApi.ts (Story 12.3).
+- `erasableSyntaxOnly: true` constraint respected — all error classes use explicit property declaration + body assignment (no constructor param properties).
+- `mergeView(viewId, patch)` added to `NikeCartViewsApi` — delegates the bind operation cleanly without duplicating transport.
+- `blockReason.ts` already contained `no_payment_method` and `session_expired` — no modification required.
+- Defensive parse: tries `methods` → `paymentMethods` → `objects` per dev notes pitfall.
+- Story 12.6 was running concurrently; its test for `NikePaymentApi.bindPaymentMethod` was unblocked by this story's `mergeView` addition.
+
+### Test results
+
+- New tests: 22 pass / 0 fail (paymentApi.test.ts)
+- Full suite: 353 pass / 1 fail (1 pre-existing failure: `completeShipping` unrelated to this story)
+- `tsc --noEmit`: 4 errors (all pre-existing, none introduced)
+
+## Change Log
+
+| Date | Change | Author |
+|------|--------|--------|
+| 2026-04-25 | Initial implementation — Tasks 1–7 complete | Claude Sonnet 4.6 |
