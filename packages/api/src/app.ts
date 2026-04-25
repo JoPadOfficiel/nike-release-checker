@@ -2,9 +2,11 @@ import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import Fastify from 'fastify'
 
+import { authPlugin } from './plugins/auth.ts'
 import { errorHandlerPlugin } from './plugins/errorHandler.ts'
 import { requestIdPlugin } from './plugins/requestId.ts'
 import { healthRoute } from './routes/health.ts'
+import { webhooksRoutes } from './routes/webhooks/index.ts'
 
 export async function buildApp() {
 	const app = Fastify({
@@ -38,6 +40,7 @@ export async function buildApp() {
 	// Plugins
 	await app.register(errorHandlerPlugin)
 	await app.register(requestIdPlugin)
+	await app.register(authPlugin)
 
 	// OpenAPI
 	await app.register(fastifySwagger, {
@@ -55,13 +58,14 @@ export async function buildApp() {
 		routePrefix: '/docs',
 	})
 
-	// Expose raw OpenAPI JSON
-	app.get('/docs/openapi.json', async (_req, reply) => {
+	// Expose raw OpenAPI JSON (anonymous — same as /docs/* swagger UI)
+	app.get('/docs/openapi.json', { config: { auth: 'anonymous' } }, async (_req, reply) => {
 		await reply.send(app.swagger())
 	})
 
 	// Routes
 	await app.register(healthRoute)
+	await app.register(webhooksRoutes)
 
 	return app
 }

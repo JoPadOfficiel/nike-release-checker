@@ -31,7 +31,7 @@ const healthSchema = {
 } as const
 
 export async function healthRoute(app: FastifyInstance): Promise<void> {
-	app.get('/healthz', { schema: healthSchema }, async (_req, reply) => {
+	app.get('/healthz', { schema: healthSchema, config: { auth: 'anonymous' } }, async (_req, reply) => {
 		await reply.send({
 			status: 'ok',
 			uptime: process.uptime(),

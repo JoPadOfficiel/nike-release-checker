@@ -57,7 +57,7 @@ describe('Fastify API gateway', () => {
 	it('Thrown error returns RFC 9457 problem-detail shape', async () => {
 		const app = await buildApp()
 		// Register a route that throws
-		app.get('/test-error', async () => {
+		app.get('/test-error', { config: { auth: 'anonymous' } }, async () => {
 			throw new Error('Intentional test error')
 		})
 		const prevEnv = process.env['NODE_ENV']

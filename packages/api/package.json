@@ -10,12 +10,14 @@
 		"dev": "tsx watch src/index.ts",
 		"build": "tsc -p tsconfig.build.json",
 		"start": "node dist/index.js",
+		"worker": "node dist/workers/index.js",
 		"test": "node --import tsx --test 'src/**/*.test.ts'",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@fastify/swagger": "^9.0.0",
 		"@fastify/swagger-ui": "^5.0.0",
+		"argon2": "0.44.0",
 		"fastify": "^5.0.0",
 		"pino": "^9.0.0",
 		"uuid": "^11.0.0"
