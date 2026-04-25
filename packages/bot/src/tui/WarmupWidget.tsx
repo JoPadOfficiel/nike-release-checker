@@ -48,9 +48,9 @@ export const WarmupWidget: FC<WarmupWidgetProps> = ({ controller, dropTime }) =>
 			</Box>
 			<Box marginTop={1} flexDirection='column'>
 				<Row
-					done={!!prog.sluResolved}
+					done={!!prog.slugResolved}
 					active={prog.phase === 'polling'}
-					label={`Slug resolved: ${prog.sluResolved ?? ''}`}
+					label={`Slug resolved: ${prog.slugResolved ?? ''}`}
 				/>
 				<Row
 					done={prog.sessionsValid !== undefined}

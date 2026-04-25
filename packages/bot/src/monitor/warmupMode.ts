@@ -26,7 +26,7 @@ export type WarmupPhase = 'idle' | 'polling' | 'sessions' | 'contexts' | 'ready'
 export interface WarmupProgress {
 	phase: WarmupPhase
 	tMinusSeconds: number
-	sluResolved?: string
+	slugResolved?: string
 	sessionsValid?: number
 	sessionsTotal?: number
 	contextsReady?: number
@@ -144,7 +144,7 @@ export class WarmupController {
 			this.ee.emit('progress', {
 				phase: 'collapsed',
 				tMinusSeconds: tMinus(),
-				sluResolved: slug,
+				slugResolved: slug,
 			})
 			return { slug, validAccounts: opts.accounts, contexts: this.contexts }
 		}
@@ -158,7 +158,7 @@ export class WarmupController {
 		this.ee.emit('progress', {
 			phase: 'sessions',
 			tMinusSeconds: tMinus(),
-			sluResolved: slug,
+			slugResolved: slug,
 		})
 		const validated = await Promise.all(
 			opts.accounts.map(async (a) => ({
@@ -170,7 +170,7 @@ export class WarmupController {
 		this.ee.emit('progress', {
 			phase: 'sessions',
 			tMinusSeconds: tMinus(),
-			sluResolved: slug,
+			slugResolved: slug,
 			sessionsValid: validAccounts.length,
 			sessionsTotal: opts.accounts.length,
 		})
