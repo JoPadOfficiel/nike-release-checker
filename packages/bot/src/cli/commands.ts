@@ -1,9 +1,19 @@
-import { createRequire } from 'node:module'
 import { Command } from 'commander'
 import type { CheckoutResult } from '../tui/SummaryScreen.tsx'
 
-const require = createRequire(import.meta.url)
-const pkg = require('../../package.json') as { version: string }
+// Resolve the bot package version. In a SEA / CJS bundle `import.meta.url`
+// is not available, so we detect the runtime and fall back accordingly.
+const pkg = (() => {
+	try {
+		// CJS / SEA path — `require` is the global runtime require.
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		return (globalThis as { require?: (id: string) => unknown }).require?.(
+			'../../package.json',
+		) as { version: string } | undefined
+	} catch {
+		return undefined
+	}
+})() ?? { version: '0.1.0' }
 
 export const program = new Command()
 

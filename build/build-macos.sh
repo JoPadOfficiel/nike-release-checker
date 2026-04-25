@@ -4,11 +4,12 @@ set -euo pipefail
 VERSION=$(node -p "require('./packages/bot/package.json').version")
 DIST=packages/bot/dist
 
-# 1. Bundle the JS
-cd packages/bot && node scripts/bundle.mjs && cd ../..
-
-# 2. Generate the SEA blob
-node --experimental-sea-config packages/bot/sea-config.json
+# 1. Bundle the JS + generate the SEA blob (from packages/bot so the relative
+# paths in sea-config.json resolve correctly).
+cd packages/bot
+node scripts/bundle.mjs
+node --experimental-sea-config sea-config.json
+cd ../..
 
 # 3. Build ARM64 + x64 variants
 for ARCH in arm64 x64; do
