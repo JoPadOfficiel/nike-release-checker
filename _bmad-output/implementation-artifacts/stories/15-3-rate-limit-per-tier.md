@@ -1,6 +1,6 @@
 # Story 15.3: Per-Tier Rate Limiting (Redis Sliding Window)
 
-Status: backlog
+Status: done
 
 ## Story
 

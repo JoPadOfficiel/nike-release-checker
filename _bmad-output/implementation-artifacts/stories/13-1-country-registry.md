@@ -1,6 +1,28 @@
 # Story 13.1: Country Registry — Interface + Initial Country Set
 
-Status: backlog
+Status: done
+
+## Review Findings (2026-04-25)
+
+### LOW — Test title mismatch ("53 SDK countries" vs actual 52)
+File: `packages/bot/src/country/registry.test.ts` line 104
+The test enumerated 52 codes but the title said "53 SDK countries". Misleading on CI failures.
+
+### LOW (sdkFactory) — Dead entry `'es-419': 'es-419'` in `LOCALE_OVERRIDE`
+File: `packages/bot/src/country/sdkFactory.ts` line 78
+The `es-419` entry mapped to itself (`es-419`) which is not a valid locale per the `CountrySchema` regex `/^[a-z]{2}-[A-Z]{2}$/`. However, this entry was unreachable because all Latin American countries (CL, MX, PR, UY) have explicit `LOCALE_BY_CODE` overrides evaluated before `LOCALE_OVERRIDE`. Dead code that could produce invalid locales if ever reached.
+
+### LOW (sdkFactory) — Luxembourg locale `lb-LU` is non-standard for Adyen
+File: `packages/bot/src/country/sdkFactory.ts` line 128
+Luxembourgish (`lb`) is not a supported Adyen iframe locale. Luxembourg's Nike store uses French. Changed to `fr-LU`.
+
+## Patches Applied (2026-04-25)
+
+| # | Severity | File | Change |
+|---|----------|------|--------|
+| 1 | LOW | `registry.test.ts:104` | Fixed test title "53 SDK countries" → "52 SDK countries" |
+| 2 | LOW | `sdkFactory.ts:78` | Removed dead `'es-419': 'es-419'` from `LOCALE_OVERRIDE` + clarifying comment |
+| 3 | LOW | `sdkFactory.ts:128` | Changed LU locale `lb-LU` → `fr-LU` (standard Adyen locale for Luxembourg) |
 
 ## Story
 

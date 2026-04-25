@@ -1,6 +1,6 @@
 # Story 15.1: Fastify Gateway Skeleton (`packages/api`)
 
-Status: backlog
+Status: done
 
 ## Story
 

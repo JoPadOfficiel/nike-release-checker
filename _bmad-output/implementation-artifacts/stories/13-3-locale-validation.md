@@ -1,6 +1,14 @@
 # Story 13.3: Per-Country Locale Validation (Phone + Zip)
 
-Status: backlog
+Status: done
+
+## Review Findings (2026-04-25)
+
+No functional findings. Validation layer is clean — imperative + valibot schema paths are both tested. Empty phone accepted (optional), empty zip rejected (required).
+
+## Patches Applied (2026-04-25)
+
+None required.
 
 ## Story
 

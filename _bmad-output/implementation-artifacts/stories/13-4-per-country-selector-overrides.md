@@ -1,6 +1,18 @@
 # Story 13.4: Per-Country Selector Overrides
 
-Status: backlog
+Status: done
+
+## Review Findings (2026-04-25)
+
+### MEDIUM — Dead variable `overrideRel`/`overridePath` computed when `selectorOverridePath === null`
+File: `packages/bot/src/country/selectorLoader.ts` lines 119-120
+When `country.selectorOverridePath === null`, the variables `overrideRel` and `overridePath` were computed and never used. The conditional on line 121 immediately returned `null` without reading the file. Dead code that could mislead maintainers into thinking the computed path was somehow used.
+
+## Patches Applied (2026-04-25)
+
+| # | Severity | File | Change |
+|---|----------|------|--------|
+| 1 | MEDIUM | `selectorLoader.ts:119-138` | Replaced dead `overrideRel`/`overridePath` block with conditional that only computes path when `selectorOverridePath !== null`; improved error message to reference resolved path or `(no override)` |
 
 ## Story
 

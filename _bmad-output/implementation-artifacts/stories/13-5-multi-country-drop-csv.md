@@ -1,6 +1,19 @@
 # Story 13.5: Multi-Country `drop.csv` Schema Extension
 
-Status: backlog
+Status: done
+
+## Review Findings (2026-04-25)
+
+### HIGH — `resolveAccountsFilter` with `kind: 'explicit'` bypassed country-scoping
+File: `packages/bot/src/config/dropCsv.ts` lines 163-164
+When `filter.kind === 'explicit'`, the function filtered only by `validSessionIds` but ignored `dropCountry`/`accountCountries`. An operator could specify account IDs from country A for a drop targeting country B, and those accounts would be included without any country check. Only the `kind: 'all'` path implemented country-scoping. This asymmetry could cause cross-country contamination in multi-country drops.
+
+## Patches Applied (2026-04-25)
+
+| # | Severity | File | Change |
+|---|----------|------|--------|
+| 1 | HIGH | `dropCsv.ts:163-165` | Extended `kind: 'explicit'` path to apply same `accountCountries.get(id) === dropCountry` guard as `kind: 'all'` |
+| 2 | HIGH | `dropCsv.test.ts` | Added regression test `resolveAccountsFilter — explicit with dropCountry scopes to matching accounts` |
 
 ## Story
 

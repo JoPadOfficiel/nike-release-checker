@@ -1,6 +1,6 @@
 # Story 15.5: Webhook Delivery (Outbox Pattern + Background Worker)
 
-Status: backlog
+Status: done
 
 ## Story
 

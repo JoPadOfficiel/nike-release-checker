@@ -1,6 +1,6 @@
 # Story 15.2: API-Key Bearer Authentication Middleware
 
-Status: backlog
+Status: done
 
 ## Story
 

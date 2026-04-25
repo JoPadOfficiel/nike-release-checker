@@ -1,6 +1,14 @@
 # Story 13.2: Per-Country Cart Endpoint Parameterization
 
-Status: backlog
+Status: done
+
+## Review Findings (2026-04-25)
+
+No findings. `endpoints.ts` cleanly centralises all URL builders, parameterised by `Country`. No hardcoded country strings found in downstream modules.
+
+## Patches Applied (2026-04-25)
+
+None required.
 
 ## Story
 

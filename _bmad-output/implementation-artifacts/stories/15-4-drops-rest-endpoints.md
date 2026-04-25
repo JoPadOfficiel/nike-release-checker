@@ -1,6 +1,6 @@
 # Story 15.4: Drop REST Endpoints (`/v1/drops`)
 
-Status: backlog
+Status: done
 
 ## Story
 

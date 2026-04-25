@@ -1,6 +1,6 @@
 # Story 15.6: Customer Self-Service Read-API (`/v1/account/*`)
 
-Status: backlog
+Status: done
 
 ## Story
 
