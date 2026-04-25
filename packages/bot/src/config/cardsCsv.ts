@@ -39,14 +39,14 @@ export type CardsParseResult = {
 }
 
 export async function parseCardsCsv(filePath: string): Promise<CardsParseResult> {
-	const { rows: rawRows, parseErrors } = await readCsvRows(filePath)
+	const { rows: rawRows, parseErrors, rowToSourceLine } = await readCsvRows(filePath)
 
 	const rows: CardCsvRow[] = []
 	const errors: CsvIssue[] = [...parseErrors]
 	const seenIds = new Set<string>()
 
 	rawRows.forEach((row, idx) => {
-		const rowNum = idx + 2
+		const rowNum = rowToSourceLine[idx] ?? idx + 2
 		const result = v.safeParse(CardRowSchema, row)
 		if (!result.success) {
 			for (const issue of result.issues) {

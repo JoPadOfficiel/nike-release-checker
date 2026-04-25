@@ -69,6 +69,36 @@ test('password masked in error output', async () => {
 	)
 })
 
+test('error rows reflect source-file line numbers when comments precede data', async () => {
+	// Source layout (1-based lines):
+	//   1: # leading comment
+	//   2: # another comment
+	//   3: # yet another
+	//   4: account_id,email,password,preferred_sizes   ← header
+	//   5: kev_001,a@b.co,p,42                         ← valid
+	//   6: kev_002,x@y.co,q,43                         ← valid
+	//   7: kev_003,not-an-email,r,44                   ← invalid (line 7)
+	await withTempCsv(
+		'# leading comment\n' +
+			'# another comment\n' +
+			'# yet another\n' +
+			'account_id,email,password,preferred_sizes\n' +
+			'kev_001,a@b.co,p,42\n' +
+			'kev_002,x@y.co,q,43\n' +
+			'kev_003,not-an-email,r,44\n',
+		async (f) => {
+			const r = await parseAccountsCsv(f)
+			const emailErr = r.errors.find((e) => e.column === 'email')
+			assert.ok(emailErr, 'expected an email error')
+			assert.equal(
+				emailErr.row,
+				7,
+				`expected error to point at source line 7, got ${emailErr.row}`,
+			)
+		},
+	)
+})
+
 test('malformed proxy URL produces structured error', async () => {
 	await withTempCsv(
 		'account_id,email,password,proxy_url,preferred_sizes\nkev_001,a@b.co,p,not-a-url,42',

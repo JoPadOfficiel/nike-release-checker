@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, writeFile, mkdtemp, rm, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { tmpdir, platform } from 'node:os'
 import { join } from 'node:path'
 import { initWithPassphrase, importCardsCsv, getCard, resetDb } from './cardsStore.ts'
 
@@ -121,6 +121,25 @@ test('import rolls back the transaction on failure (all-or-nothing)', async () =
 		assert.equal(result.imported, 0)
 		assert.ok(result.errors.length > 0)
 		assert.equal(getCard('dup_001', key, db), null)
+	})
+})
+
+test('cards.db file is chmod 0o600 (owner-only) on POSIX', async (t) => {
+	if (platform() === 'win32') {
+		t.skip('POSIX modes not honored on Windows')
+		return
+	}
+	await withTempDir(async (dir) => {
+		const db = join(dir, 'cards.db')
+		await initWithPassphrase('pw', db)
+		const s = await stat(db)
+		// Mask off file-type bits, leaving the permission bits.
+		const perms = s.mode & 0o777
+		assert.equal(
+			perms,
+			0o600,
+			`expected cards.db permissions 0o600, got 0o${perms.toString(8)}`,
+		)
 	})
 })
 

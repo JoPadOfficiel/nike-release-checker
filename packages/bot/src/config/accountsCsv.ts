@@ -54,14 +54,16 @@ export type ParseResult = {
 }
 
 export async function parseAccountsCsv(filePath: string): Promise<ParseResult> {
-	const { rows, parseErrors } = await readCsvRows(filePath)
+	const { rows, parseErrors, rowToSourceLine } = await readCsvRows(filePath)
 
 	const accounts: AccountCsvRow[] = []
 	const errors: CsvIssue[] = [...parseErrors]
 	const seenIds = new Set<string>()
 
 	rows.forEach((row, idx) => {
-		const rowNum = idx + 2 // header is row 1
+		// Map filtered-row index → user-visible source line so error reports
+		// stay accurate when comments / blank lines precede the data.
+		const rowNum = rowToSourceLine[idx] ?? idx + 2
 		const result = v.safeParse(AccountCsvRowSchema, row)
 		if (!result.success) {
 			for (const issue of result.issues) {

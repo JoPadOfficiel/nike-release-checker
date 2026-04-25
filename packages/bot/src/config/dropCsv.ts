@@ -22,14 +22,14 @@ export async function parseDropCsv(
 	filePath: string,
 	knownAccountIds: Set<string>,
 ): Promise<DropParseResult> {
-	const { rows, parseErrors } = await readCsvRows(filePath)
+	const { rows, parseErrors, rowToSourceLine } = await readCsvRows(filePath)
 	const drops: DropRow[] = []
 	const errors: CsvIssue[] = [...parseErrors]
 	const warnings: CsvIssue[] = []
 	const seenSkus = new Set<string>()
 
 	rows.forEach((raw, idx) => {
-		const rowNum = idx + 2
+		const rowNum = rowToSourceLine[idx] ?? idx + 2
 		const sku = (raw.sku ?? '').trim().toUpperCase()
 		const sizesRaw = raw.sizes ?? ''
 		const sizes = sizesRaw.split(';').map((s) => s.trim()).filter(Boolean)

@@ -31,6 +31,7 @@ export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps
 		})),
 	)
 	const [now, setNow] = useState(Date.now())
+	const [finished, setFinished] = useState<{ cops: number; failures: number } | null>(null)
 
 	// Clock tick for elapsed updates (500ms → ≥ 2 FPS)
 	useEffect(() => {
@@ -38,7 +39,9 @@ export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps
 		return () => clearInterval(t)
 	}, [])
 
-	// Event bus subscription
+	// Event bus subscription — only mutates state. Side effects (onFinished)
+	// live in the dedicated useEffect below so the reducer stays pure (React
+	// StrictMode runs reducers twice).
 	useEffect(() => {
 		const off = globalBus.on('accountStatusChanged', ({ accountId, status }) => {
 			setRows((prev) =>
@@ -50,16 +53,23 @@ export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps
 			)
 		})
 		const off2 = globalBus.on('checkoutFinished', (sum) => {
-			setRows((prev) => {
-				onFinished({ cops: sum.cops, failures: sum.failures, rows: prev })
-				return prev
-			})
+			setFinished({ cops: sum.cops, failures: sum.failures })
 		})
 		return () => {
 			off()
 			off2()
 		}
-	}, [onFinished])
+	}, [])
+
+	// Fire onFinished exactly once with the freshest rows snapshot. Splitting
+	// from the bus subscription guarantees we never call it inside a setState
+	// reducer, and the `rows` dep ensures we read the latest state.
+	useEffect(() => {
+		if (!finished) return
+		onFinished({ cops: finished.cops, failures: finished.failures, rows })
+		// Clear so we don't re-fire when rows mutates afterwards.
+		setFinished(null)
+	}, [finished, rows, onFinished])
 
 	useInput((_, key) => {
 		if (key.escape) exit()

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { mkdirSync, existsSync, renameSync } from 'node:fs'
+import { mkdirSync, existsSync, renameSync, chmodSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import { deriveKey, encrypt, decrypt, newSalt } from './cardsCrypto.ts'
@@ -35,6 +35,14 @@ function openDbAt(path: string): Database.Database {
 			cvv_ct BLOB NOT NULL, cvv_iv BLOB NOT NULL, cvv_tag BLOB NOT NULL
 		);
 	`)
+	// Lock down DB file to owner-only (0o600) — defends against umask leaving the
+	// encrypted card store world-readable on multi-user POSIX systems. Windows
+	// ignores POSIX modes, so any errors there are silently swallowed.
+	try {
+		chmodSync(path, 0o600)
+	} catch {
+		// noop — Windows / unsupported FS
+	}
 	return db
 }
 
