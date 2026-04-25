@@ -11,6 +11,7 @@ import type { Page } from 'playwright'
 import { randomUUID } from 'node:crypto'
 import type { CartView, NikeAddress } from './cartViewsApi.types.ts'
 import { getBearerToken } from './oidcBearer.ts'
+import { validatePhone, validateZip } from '../../country/validation.ts'
 
 const API_ORIGIN = 'https://api.nike.com'
 const CART_VIEWS_BASE = '/buy/cart_views/v1'
@@ -20,6 +21,27 @@ export type UuidGen = () => string
 export const defaultUuidGen: UuidGen = () => randomUUID()
 
 // ─── Error classes ────────────────────────────────────────────────────────────
+
+/**
+ * Thrown when a phone or zip value fails country-specific validation before
+ * being sent to Nike. Callers should classify this as `invalid_address`.
+ * Story 13.3, FR59.
+ */
+export class InvalidAddressError extends Error {
+	readonly field: 'phone' | 'zip'
+	readonly country: string
+	readonly value: string
+	readonly expected: string
+
+	constructor(field: 'phone' | 'zip', country: string, value: string, expected: string) {
+		super(`Invalid ${field} for ${country}: ${JSON.stringify(value)} — ${expected}`)
+		this.name = 'InvalidAddressError'
+		this.field = field
+		this.country = country
+		this.value = value
+		this.expected = expected
+	}
+}
 
 export class CartViewTimeoutError extends Error {
 	readonly viewId: string
@@ -94,7 +116,28 @@ export class NikeCartViewsApi {
 
 	// Opens a shipping view for the given cartId. Generates a fresh client-side
 	// viewUuid per call (Nike allocates the resource on first PUT).
+	// Validates phone and zip against country-specific rules before sending (Story 13.3).
+	// On failure throws InvalidAddressError — callers classify outcome as `invalid_address`.
 	async openShippingView(cartId: string, address: NikeAddress): Promise<CartView> {
+		const country = address.country
+		const phoneResult = validatePhone(country, address.phoneNumber)
+		if (!phoneResult.ok) {
+			throw new InvalidAddressError(
+				phoneResult.field,
+				phoneResult.country,
+				phoneResult.value,
+				phoneResult.expected,
+			)
+		}
+		const zipResult = validateZip(country, address.postalCode)
+		if (!zipResult.ok) {
+			throw new InvalidAddressError(
+				zipResult.field,
+				zipResult.country,
+				zipResult.value,
+				zipResult.expected,
+			)
+		}
 		const viewUuid = this.uuidGen()
 		return this.put(viewUuid, { type: 'SHIPPING' as const, cartId, address })
 	}

@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 import type { Page } from 'playwright'
-import { NikeCartApi, NikeCartApiError } from './cartApi.ts'
+import { NikeCartApi, NikeCartApiError, UnknownCountryError } from './cartApi.ts'
+import { cartEndpoints } from './endpoints.ts'
+import { countryRegistry } from '../../country/registry.ts'
 import { generateVisitorId } from './visitorId.ts'
 import type { Cart } from './cartApi.types.ts'
 import { SessionExpiredError } from './apiErrors.ts'
@@ -566,5 +568,116 @@ describe('NikeCartApi transport — Bearer injection (Story 12.10)', () => {
 				return true
 			},
 		)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Story 13.2: per-country cart endpoint parameterization
+// ---------------------------------------------------------------------------
+
+describe('cartEndpoints — URL builders (Story 13.2)', () => {
+	const FR = countryRegistry.get('FR')
+	const US = countryRegistry.get('US')
+
+	it('cartEndpoints.cart(FR) resolves to the expected FR path', () => {
+		assert.equal(
+			cartEndpoints.cart(FR),
+			'https://api.nike.com/buy/carts/v2/FR/NIKE/NIKECOM?modifiers=VALIDATELIMITS,VALIDATEAVAILABILITY',
+		)
+	})
+
+	it('cartEndpoints.cart(US) resolves to the expected US path', () => {
+		assert.equal(
+			cartEndpoints.cart(US),
+			'https://api.nike.com/buy/carts/v2/US/NIKE/NIKECOM?modifiers=VALIDATELIMITS,VALIDATEAVAILABILITY',
+		)
+	})
+
+	it('cartEndpoints.cartGet(FR) resolves to the bare FR cart path', () => {
+		assert.equal(
+			cartEndpoints.cartGet(FR),
+			'https://api.nike.com/buy/carts/v2/FR/NIKE/NIKECOM',
+		)
+	})
+
+	it('cartEndpoints.fulfillmentOfferings(US) ends with ?marketplace=US&language=en', () => {
+		const url = cartEndpoints.fulfillmentOfferings(US)
+		assert.ok(url.endsWith('?marketplace=US&language=en'), `Got: ${url}`)
+	})
+
+	it('cartEndpoints.productUrl(FR) builds the correct locale prefix', () => {
+		assert.equal(
+			cartEndpoints.productUrl(FR, 'air-max-jBrhdR', 'CW2288-111'),
+			'/fr/t/air-max-jBrhdR/CW2288-111',
+		)
+	})
+
+	it('cartEndpoints.productUrl(US) uses en locale prefix', () => {
+		assert.equal(
+			cartEndpoints.productUrl(US, 'air-max-jBrhdR', 'CW2288-111'),
+			'/en/t/air-max-jBrhdR/CW2288-111',
+		)
+	})
+})
+
+describe('NikeCartApi constructor — fail-fast on unknown country (Story 13.2)', () => {
+	it('throws UnknownCountryError immediately for an unknown country code', () => {
+		const { page } = mockPage({ json: sampleCart })
+		assert.throws(
+			() => new NikeCartApi(page, 'XX'),
+			(err: unknown) => {
+				assert.ok(err instanceof UnknownCountryError)
+				assert.match(err.message, /XX/)
+				return true
+			},
+		)
+	})
+
+	it('succeeds construction for known country FR', () => {
+		const { page } = mockPage({ json: sampleCart })
+		assert.doesNotThrow(() => new NikeCartApi(page, 'FR'))
+	})
+
+	it('succeeds construction for known country US (even if enabled: false)', () => {
+		const { page } = mockPage({ json: sampleCart })
+		assert.doesNotThrow(() => new NikeCartApi(page, 'US'))
+	})
+})
+
+describe('NikeCartApi.initVisitor — country-aware URL (Story 13.2)', () => {
+	it('initVisitor(uuid) on FR issues fetch to the exact FR cart URL', async () => {
+		const { page, calls } = mockPage({ json: sampleCart })
+		const api = new NikeCartApi(page, 'FR')
+		await api.initVisitor('test-uuid')
+		assert.equal(
+			calls[0]!.url,
+			'https://api.nike.com/buy/carts/v2/FR/NIKE/NIKECOM?modifiers=VALIDATELIMITS,VALIDATEAVAILABILITY',
+		)
+	})
+
+	it('initVisitor(uuid) on US issues fetch to the exact US cart URL', async () => {
+		const { page, calls } = mockPage({ json: sampleCart })
+		const api = new NikeCartApi(page, 'US')
+		await api.initVisitor('test-uuid')
+		assert.equal(
+			calls[0]!.url,
+			'https://api.nike.com/buy/carts/v2/US/NIKE/NIKECOM?modifiers=VALIDATELIMITS,VALIDATEAVAILABILITY',
+		)
+	})
+
+	it('addItem on FR uses /fr/t/ locale prefix (13.4 TODO resolved)', async () => {
+		const { page, calls } = mockPage({ json: sampleCart })
+		const api = new NikeCartApi(page, 'FR')
+		await api.addItem('SKU-1', 'air-max', 'CW2288-111')
+		const body = JSON.parse(calls[0]!.data ?? '[]') as Array<{ value: { itemData: { url: string } } }>
+		assert.equal(body[0]!.value.itemData.url, '/fr/t/air-max/CW2288-111')
+	})
+
+	it('addItem on US uses /en/t/ locale prefix', async () => {
+		const { page, calls } = mockPage({ json: sampleCart })
+		const api = new NikeCartApi(page, 'US')
+		await api.addItem('SKU-1', 'air-max', 'CW2288-111')
+		const body = JSON.parse(calls[0]!.data ?? '[]') as Array<{ value: { itemData: { url: string } } }>
+		assert.equal(body[0]!.value.itemData.url, '/en/t/air-max/CW2288-111')
 	})
 })

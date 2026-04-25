@@ -8,7 +8,7 @@ export const JP: Country = Object.freeze<Country>({
 	languageCode: 'ja',
 	defaultPhonePrefix: '+81',
 	phonePattern: /^\+81\d{9,10}$/,
-	zipPattern: /^\d{3}-?\d{4}$/,
+	zipPattern: /^\d{3}-\d{4}$/,
 	addressFields: ['zip', 'city', 'street', 'country'] as Country['addressFields'],
 	adyenIframeLocale: 'ja_JP',
 	selectorOverridePath: 'selectors/JP.yaml',

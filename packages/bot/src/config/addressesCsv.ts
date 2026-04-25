@@ -1,5 +1,7 @@
 import * as v from 'valibot'
 import { readCsvRows, type CsvIssue } from './csvRead.ts'
+import { countryRegistry, UnknownCountryError } from '../country/registry.ts'
+import { phoneSchema, zipSchema } from '../country/validation.ts'
 
 // Treat empty/missing CSV cells as "not provided" so `v.optional` can apply.
 const OptionalCsvString = v.pipe(
@@ -22,6 +24,18 @@ export const AddressRowSchema = v.object({
 	),
 })
 
+/** Build a country-aware address row schema for per-row validation. */
+function buildCountryAwareSchema(countryCode: string) {
+	return v.object({
+		account_id: v.pipe(v.string(), v.minLength(1, 'account_id required')),
+		street: v.pipe(v.string(), v.minLength(1, 'street required')),
+		city: v.pipe(v.string(), v.minLength(1, 'city required')),
+		zip: zipSchema(countryCode),
+		country: v.pipe(v.string(), v.length(2, 'country must be a 2-letter ISO code')),
+		phone: v.optional(phoneSchema(countryCode)),
+	})
+}
+
 export type AddressRow = v.InferOutput<typeof AddressRowSchema>
 
 export type AddressParseResult = {
@@ -42,9 +56,11 @@ export async function parseAddressesCsv(
 
 	rows.forEach((row, idx) => {
 		const rowNum = rowToSourceLine[idx] ?? idx + 2
-		const result = v.safeParse(AddressRowSchema, row)
-		if (!result.success) {
-			for (const issue of result.issues) {
+
+		// First pass: validate base shape (account_id, street, city, country)
+		const baseResult = v.safeParse(AddressRowSchema, row)
+		if (!baseResult.success) {
+			for (const issue of baseResult.issues) {
 				const column = String(issue.path?.[0]?.key ?? 'unknown')
 				const rawValue = String(row[column] ?? '')
 				errors.push({
@@ -56,7 +72,44 @@ export async function parseAddressesCsv(
 			}
 			return
 		}
-		const addr = result.output
+
+		// Second pass: country-aware phone + zip validation
+		const rawCountry = String(row['country'] ?? '').trim().toUpperCase()
+		let isCountrySupported = false
+		try {
+			countryRegistry.get(rawCountry)
+			isCountrySupported = true
+		} catch (err) {
+			if (err instanceof UnknownCountryError) {
+				errors.push({
+					row: rowNum,
+					column: 'country',
+					value: rawCountry,
+					message: `country \`${rawCountry}\` not supported (see \`nike-bot countries\` for list)`,
+				})
+				return
+			}
+			throw err
+		}
+
+		if (isCountrySupported) {
+			const countryAwareResult = v.safeParse(buildCountryAwareSchema(rawCountry), row)
+			if (!countryAwareResult.success) {
+				for (const issue of countryAwareResult.issues) {
+					const column = String(issue.path?.[0]?.key ?? 'unknown')
+					const rawValue = String(row[column] ?? '')
+					errors.push({
+						row: rowNum,
+						column,
+						value: rawValue,
+						message: issue.message,
+					})
+				}
+				return
+			}
+		}
+
+		const addr = baseResult.output
 		if (!knownAccountIds.has(addr.account_id)) {
 			warnings.push({
 				row: rowNum,

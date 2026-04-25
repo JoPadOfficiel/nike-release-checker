@@ -10,15 +10,13 @@ import type { Page } from 'playwright'
 import type { Cart, JsonPatchOp } from './cartApi.types.ts'
 import { kpsdkCacheHolder, refreshKpsdkToken } from '../../stealth/kpsdk/cache.js'
 import { getBearerToken } from './oidcBearer.ts'
+import { countryRegistry } from '../../country/registry.ts'
+import type { Country } from '../../country/types.ts'
+import { cartEndpoints } from './endpoints.ts'
+
+export { UnknownCountryError } from '../../country/registry.ts'
 
 const API_ORIGIN = 'https://api.nike.com'
-
-// The `?modifiers=…` query is required — omitting it returns a different cart shape.
-const cartPath = (country: string): string =>
-	`/buy/carts/v2/${country}/NIKE/NIKECOM?modifiers=VALIDATELIMITS,VALIDATEAVAILABILITY`
-
-const cartGetPath = (country: string): string =>
-	`/buy/carts/v2/${country}/NIKE/NIKECOM`
 
 // RFC 6901 JSON Pointer escaping: `~` → `~0`, `/` → `~1`. Required because
 // `itemId` is interpolated into JSON Patch `path` strings (see removeItem,
@@ -81,12 +79,13 @@ function lowerCaseHeaders(
 
 export class NikeCartApi {
 	private readonly page: Page
-	private readonly market: string
+	private readonly country: Country
 	private readonly accountId: string | undefined
 
-	constructor(page: Page, market = 'FR', accountId?: string) {
+	constructor(page: Page, countryCode = 'FR', accountId?: string) {
 		this.page = page
-		this.market = market
+		// Throws UnknownCountryError immediately if countryCode is not in the registry.
+		this.country = countryRegistry.get(countryCode)
 		this.accountId = accountId
 	}
 
@@ -110,15 +109,12 @@ export class NikeCartApi {
 				),
 			)
 		}
-		// TODO(Story 13.4): derive locale prefix from this.market once the
-		// per-country URL table lands. Hardcoded `/fr/t/` is acceptable while
-		// v3.0 ships FR-only.
 		return this.patch([
 			{
 				op: 'add',
 				path: '/items',
 				value: {
-					itemData: { url: `/fr/t/${slug}/${styleColor}` },
+					itemData: { url: cartEndpoints.productUrl(this.country, slug, styleColor) },
 					skuId,
 					quantity,
 				},
@@ -127,7 +123,7 @@ export class NikeCartApi {
 	}
 
 	getCart(): Promise<Cart> {
-		return this.request<Cart>(cartGetPath(this.market), { method: 'GET' })
+		return this.request<Cart>(cartEndpoints.cartGet(this.country).slice(API_ORIGIN.length), { method: 'GET' })
 	}
 
 	removeItem(itemId: string): Promise<Cart> {
@@ -163,7 +159,7 @@ export class NikeCartApi {
 		// REJECTS that content-type when the request is issued from the page
 		// JS context — it accepts only `application/json; charset=UTF-8`.
 		// We follow what Nike actually accepts, not the standard.
-		return this.request<Cart>(cartPath(this.market), {
+		return this.request<Cart>(cartEndpoints.cart(this.country).slice(API_ORIGIN.length), {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json; charset=UTF-8' },
 			data: JSON.stringify(ops),
@@ -173,10 +169,10 @@ export class NikeCartApi {
 	private async ensureKpsdkToken(): Promise<void> {
 		if (!this.accountId) return
 		const cache = kpsdkCacheHolder.instance
-		const cached = cache.get(this.accountId, this.market)
+		const cached = cache.get(this.accountId, this.country.code)
 		if (!cached) {
 			// Cache miss — force-fire a synthetic KPSDK request to warm the page context.
-			await refreshKpsdkToken(cache, this.accountId, this.market, this.page)
+			await refreshKpsdkToken(cache, this.accountId, this.country.code, this.page)
 		}
 		// Cache hit: page context is already warm, no force-fire needed.
 	}
