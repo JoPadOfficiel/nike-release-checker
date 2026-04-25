@@ -80,6 +80,14 @@ export interface DropRunRepository {
   reapStale(staleThresholdMs?: number): Promise<number>
 
   listByDrop(dropId: string): Promise<DropRun[]>
+
+  /**
+   * Returns true when the given Nike account is referenced by at least one
+   * drop run whose state is WAITING or COPPING (i.e. the account is in-flight).
+   *
+   * Called by the Nike accounts DELETE route to return HTTP 409.
+   */
+  hasInFlight(nikeAccountId: string): boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +233,16 @@ export const dropRunRepository: DropRunRepository = {
     return [...store.values()]
       .filter((r) => r.drop_id === dropId)
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  },
+
+  hasInFlight(nikeAccountId) {
+    for (const run of store.values()) {
+      if (run.nike_account_id === nikeAccountId &&
+          (run.state === 'WAITING' || run.state === 'COPPING')) {
+        return true
+      }
+    }
+    return false
   },
 }
 

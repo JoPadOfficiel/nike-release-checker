@@ -63,13 +63,13 @@ describe('Migration 16.1 — schema tests', () => {
     client = await freshMigratedClient()
   })
 
-  it('schema_migrations tracks all 5 files after runUp', async () => {
+  it('schema_migrations tracks all 6 files after runUp', async () => {
     const res = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 5)
+    assert.equal(res.rows.length, 6)
     assert.equal(res.rows[0]!.version, '0001_customers_and_api_keys.sql')
-    assert.equal(res.rows[4]!.version, '0005_customer_dek_salt.sql')
+    assert.equal(res.rows[5]!.version, '0006_nike_accounts_email_lookup.sql')
   })
 
   it('runUp is idempotent — second call is a no-op (no error, same row count)', async () => {
@@ -77,7 +77,7 @@ describe('Migration 16.1 — schema tests', () => {
     const res = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 5)
+    assert.equal(res.rows.length, 6)
   })
 
   it('CASCADE: deleting a customer removes api_keys, drops, webhooks', async () => {

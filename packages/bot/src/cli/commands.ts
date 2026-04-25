@@ -735,7 +735,7 @@ program
 			const { default: React } = await import('react')
 			const { render } = await import('ink')
 			const { Dashboard } = await import('../tui/Dashboard.tsx')
-			const { SummaryScreen } = await import('../tui/SummaryScreen.tsx')
+			const { renderSummary } = await import('../tui/renderSummary.tsx')
 
 			const configPath = program.opts<{ config: string }>().config
 			const dryRun = opts.dryRun ?? false
@@ -810,6 +810,8 @@ program
 					)
 					console.log(`[run] ${drop.sku} → ${skuResolved.productUrl}`)
 
+					const startedAt = new Date()
+
 					// Mount the Dashboard. parallelCheckout already emits to globalBus;
 					// the Dashboard subscribes and renders live row-by-row updates.
 					const dashboardApp = render(
@@ -838,23 +840,16 @@ program
 						await dashboardApp.waitUntilExit().catch(() => undefined)
 					}
 
-					// 5. Adapt → flat CheckoutResult[] for SummaryScreen + auto report write.
+					// 5. Adapt → flat CheckoutResult[] and render the final summary screen.
 					const results = summary.results.map((p) =>
 						toCheckoutResult(p, drop.sku),
 					)
 
-					const summaryApp = render(
-						React.createElement(SummaryScreen, {
-							results,
-							// TODO: wire to retryController + RetrySelection screen.
-							// Pragmatic v1: retry is deferred — onRetry is a no-op so the
-							// summary still renders the [R] hint without acting on it.
-							onRetry: () => {
-								/* TODO: integrate RetryController + RetrySelection */
-							},
-						}),
-					)
-					await summaryApp.waitUntilExit()
+					await renderSummary(results, startedAt, {
+						retryHandler: () => {
+							// TODO: integrate RetryController + RetrySelection (Story 11.5)
+						},
+					})
 				}
 
 				// TODO: integrate WarmupController for scheduled drops (T-5:00 lead)

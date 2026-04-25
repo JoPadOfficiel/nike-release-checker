@@ -1,15 +1,18 @@
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
+import fastifyWebsocket from '@fastify/websocket'
 import Fastify from 'fastify'
 
 import { authPlugin } from './plugins/auth.ts'
 import { errorHandlerPlugin } from './plugins/errorHandler.ts'
 import { rateLimitPlugin } from './plugins/rateLimit.ts'
 import { requestIdPlugin } from './plugins/requestId.ts'
+import { dropEventsRoute } from './routes/dropEvents.ts'
 import { dropsRoutes } from './routes/drops/index.ts'
 import { healthRoute } from './routes/health.ts'
 import { accountRoutes } from './routes/account/index.ts'
 import { cardsRoutes } from './routes/account/cards.ts'
+import { nikeAccountsRoutes } from './routes/account/nikeAccounts.ts'
 import { webhooksRoutes } from './routes/webhooks/index.ts'
 import { createDropScheduler } from './scheduler/dropScheduler.ts'
 import { NoopWorkerPoolClient } from './scheduler/workerPoolClient.ts'
@@ -44,6 +47,7 @@ export async function buildApp() {
 	})
 
 	// Plugins
+	await app.register(fastifyWebsocket)
 	await app.register(errorHandlerPlugin)
 	await app.register(requestIdPlugin)
 	await app.register(authPlugin)
@@ -71,11 +75,13 @@ export async function buildApp() {
 	})
 
 	// Routes
+	await app.register(dropEventsRoute)
 	await app.register(healthRoute)
 	await app.register(webhooksRoutes)
 	await app.register(dropsRoutes)
 	await app.register(accountRoutes)
 	await app.register(cardsRoutes)
+	await app.register(nikeAccountsRoutes)
 
 	// Scheduler lifecycle — start on ready, stop on close
 	const scheduler = createDropScheduler({ workerPool: new NoopWorkerPoolClient() })

@@ -1,50 +1,83 @@
 /** @jsxImportSource react */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readdir, rm, mkdtemp } from 'node:fs/promises'
+import { rm, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { render } from 'ink-testing-library'
-import { SummaryScreen, type CheckoutResult } from './SummaryScreen.tsx'
+import { SummaryScreen, type CheckoutResult, formatDuration } from './SummaryScreen.tsx'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function makeResults(copCount: number, soldOutCount: number): CheckoutResult[] {
-	const results: CheckoutResult[] = []
-	for (let i = 0; i < copCount; i++) {
-		results.push({
-			accountId: `cop_${i}`,
-			status: 'COP',
-			sku: 'AH7389-106',
-			size: '42',
-			orderNumber: `OR-${i}`,
-			durationMs: 1000 + i,
-		})
+const NOW = new Date('2026-04-24T10:00:00Z')
+const LATER = new Date('2026-04-24T10:01:35Z') // 95s later
+
+function makeResult(
+	status: CheckoutResult['status'],
+	id: string,
+): CheckoutResult {
+	return {
+		accountId: id,
+		status,
+		sku: 'AH7389-106',
+		size: '42',
+		durationMs: 1000,
 	}
-	for (let i = 0; i < soldOutCount; i++) {
-		results.push({
-			accountId: `so_${i}`,
-			status: 'SOLD_OUT',
-			sku: 'AH7389-106',
-			size: '42',
-			durationMs: 500 + i,
-		})
-	}
-	return results
 }
 
-test('renders headline "2 cops out of 10" for 2 COP + 8 SOLD_OUT', async () => {
-	const results = makeResults(2, 8)
+function defaultProps(
+	results: CheckoutResult[],
+	overrides: Partial<{
+		reportPath: string
+		onRetry: (f: CheckoutResult[]) => void
+		onQuit: () => void
+	}> = {},
+) {
+	return {
+		results,
+		startedAt: NOW,
+		endedAt: LATER,
+		reportPath: overrides.reportPath ?? './reports/report-2026-04-24.csv',
+		onRetry: overrides.onRetry ?? (() => {}),
+		onQuit: overrides.onQuit ?? (() => {}),
+	}
+}
+
+// ── formatDuration unit tests ────────────────────────────────────────────────
+
+test('formatDuration: < 1 min → "XX.Xs"', () => {
+	assert.equal(formatDuration(5_000), '5.0s')
+	assert.equal(formatDuration(59_900), '59.9s')
+})
+
+test('formatDuration: ≥ 1 min → "MM:SS"', () => {
+	assert.equal(formatDuration(60_000), '1:00')
+	assert.equal(formatDuration(95_000), '1:35')
+	assert.equal(formatDuration(3_600_000), '60:00')
+})
+
+// ── SummaryScreen render tests ───────────────────────────────────────────────
+
+test('renders headline "3 cops out of 6 accounts" for 3 COP + 2 BLOCKED + 1 THREEDS_TIMEOUT', async () => {
+	const results = [
+		makeResult('COP', 'c1'),
+		makeResult('COP', 'c2'),
+		makeResult('COP', 'c3'),
+		makeResult('BLOCKED', 'b1'),
+		makeResult('BLOCKED', 'b2'),
+		makeResult('THREEDS_TIMEOUT', 't1'),
+	]
 	const cwd = process.cwd()
-	const tmp = await mkdtemp(join(tmpdir(), 'summary-render-'))
+	const tmp = await mkdtemp(join(tmpdir(), 'summary-headline-'))
 	process.chdir(tmp)
 	try {
-		const ui = render(<SummaryScreen results={results} onRetry={() => {}} />)
+		const ui = render(<SummaryScreen {...defaultProps(results)} />)
 		await sleep(30)
 		const out = ui.lastFrame() ?? ''
-		assert.match(out, /2 cops out of 10/)
+		assert.match(out, /3 cops out of 6/)
 		assert.match(out, /COP/)
-		assert.match(out, /SOLD_OUT/)
+		assert.match(out, /BLOCKED/)
+		assert.match(out, /THREEDS_TIMEOUT/)
 		ui.unmount()
 	} finally {
 		process.chdir(cwd)
@@ -52,59 +85,103 @@ test('renders headline "2 cops out of 10" for 2 COP + 8 SOLD_OUT', async () => {
 	}
 })
 
-test('writeReport is invoked in useEffect and creates a CSV file', async () => {
-	const results = makeResults(1, 2)
-	const cwd = process.cwd()
-	const tmp = await mkdtemp(join(tmpdir(), 'summary-write-'))
-	process.chdir(tmp)
-	try {
-		const ui = render(<SummaryScreen results={results} onRetry={() => {}} />)
-		// Poll for the report directory and a .csv file to appear.
-		let files: string[] = []
-		for (let i = 0; i < 50; i++) {
-			await sleep(20)
-			try {
-				files = await readdir(join(tmp, 'reports'))
-				if (files.some((f) => f.endsWith('.csv'))) break
-			} catch {
-				// folder not created yet
-			}
-		}
-		assert.ok(
-			files.some((f) => f.endsWith('.csv')),
-			`expected a .csv report in ${tmp}/reports, got ${JSON.stringify(files)}`,
-		)
-		ui.unmount()
-	} finally {
-		process.chdir(cwd)
-		await rm(tmp, { recursive: true, force: true })
-	}
+test('shows duration from startedAt to endedAt', async () => {
+	const results = [makeResult('COP', 'c1')]
+	const ui = render(<SummaryScreen {...defaultProps(results)} />)
+	await sleep(30)
+	const out = ui.lastFrame() ?? ''
+	assert.match(out, /1:35/) // 95s formatted as MM:SS
+	ui.unmount()
 })
 
-test("pressing 'r' fires onRetry with the failed subset", async () => {
-	const results = makeResults(2, 8)
-	const cwd = process.cwd()
-	const tmp = await mkdtemp(join(tmpdir(), 'summary-retry-'))
-	process.chdir(tmp)
-	try {
-		let retried: CheckoutResult[] | undefined
-		const ui = render(
-			<SummaryScreen
-				results={results}
-				onRetry={(failed) => {
+test('shows report path', async () => {
+	const results = [makeResult('COP', 'c1')]
+	const ui = render(
+		<SummaryScreen
+			{...defaultProps(results, { reportPath: './reports/report-2026-04-24-100015.csv' })}
+		/>,
+	)
+	await sleep(30)
+	const out = ui.lastFrame() ?? ''
+	assert.match(out, /Report saved:/)
+	assert.match(out, /report-2026-04-24-100015\.csv/)
+	ui.unmount()
+})
+
+test("pressing 'r' fires onRetry with the 3 failed results", async () => {
+	const results = [
+		makeResult('COP', 'c1'),
+		makeResult('COP', 'c2'),
+		makeResult('COP', 'c3'),
+		makeResult('BLOCKED', 'b1'),
+		makeResult('BLOCKED', 'b2'),
+		makeResult('THREEDS_TIMEOUT', 't1'),
+	]
+	let retried: CheckoutResult[] | undefined
+	const ui = render(
+		<SummaryScreen
+			{...defaultProps(results, {
+				onRetry: (failed) => {
 					retried = failed
-				}}
-			/>,
-		)
-		await sleep(30)
-		ui.stdin.write('r')
-		await sleep(30)
-		assert.ok(retried, 'expected onRetry to have been called')
-		assert.equal(retried.length, 8)
-		assert.ok(retried.every((r) => r.status !== 'COP'))
-		ui.unmount()
-	} finally {
-		process.chdir(cwd)
-		await rm(tmp, { recursive: true, force: true })
-	}
+				},
+			})}
+		/>,
+	)
+	await sleep(30)
+	ui.stdin.write('r')
+	await sleep(30)
+	assert.ok(retried, 'expected onRetry to have been called')
+	assert.equal(retried.length, 3)
+	assert.ok(retried.every((r) => r.status !== 'COP'))
+	ui.unmount()
+})
+
+test("pressing 'q' fires onQuit", async () => {
+	const results = [makeResult('COP', 'c1')]
+	let quitCalled = false
+	const ui = render(
+		<SummaryScreen
+			{...defaultProps(results, {
+				onQuit: () => {
+					quitCalled = true
+				},
+			})}
+		/>,
+	)
+	await sleep(30)
+	ui.stdin.write('q')
+	await sleep(30)
+	assert.ok(quitCalled, 'expected onQuit to have been called')
+	ui.unmount()
+})
+
+test('with 0 failures, pressing "r" does NOT call onRetry', async () => {
+	const results = [makeResult('COP', 'c1'), makeResult('COP', 'c2')]
+	let retryCalled = false
+	const ui = render(
+		<SummaryScreen
+			{...defaultProps(results, {
+				onRetry: () => {
+					retryCalled = true
+				},
+			})}
+		/>,
+	)
+	await sleep(30)
+	ui.stdin.write('r')
+	await sleep(30)
+	assert.ok(!retryCalled, 'onRetry should NOT have been called when there are no failures')
+	ui.unmount()
+})
+
+test('renders headline "2 cops out of 10" for 2 COP + 8 SOLD_OUT (regression)', async () => {
+	const results = [
+		...Array.from({ length: 2 }, (_, i) => makeResult('COP', `c${i}`)),
+		...Array.from({ length: 8 }, (_, i) => makeResult('SOLD_OUT', `s${i}`)),
+	]
+	const ui = render(<SummaryScreen {...defaultProps(results)} />)
+	await sleep(30)
+	const out = ui.lastFrame() ?? ''
+	assert.match(out, /2 cops out of 10/)
+	ui.unmount()
 })
