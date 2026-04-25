@@ -42,8 +42,32 @@ export const apiKeysDb = {
 		store.set(row.key_id, row)
 	},
 
+	/**
+	 * List all non-secret metadata for a given customer's API keys.
+	 * NEVER returns secret_hash or the original secret.
+	 */
+	listByCustomer(customerId: string): ApiKeyMetaRow[] {
+		return Array.from(store.values())
+			.filter((r) => r.customer_id === customerId)
+			.map((r) => ({
+				key_id: r.key_id,
+				label: r.label ?? null,
+				created_at: r.created_at,
+				last_used_at: r.last_used_at ?? null,
+				revoked_at: r.revoked_at ?? null,
+			}))
+	},
+
 	/** Clear all keys — used between tests. */
 	_clear(): void {
 		store.clear()
 	},
+}
+
+export interface ApiKeyMetaRow {
+	key_id: string
+	label: string | null
+	created_at: Date
+	last_used_at: Date | null
+	revoked_at: Date | null
 }

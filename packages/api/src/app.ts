@@ -4,8 +4,11 @@ import Fastify from 'fastify'
 
 import { authPlugin } from './plugins/auth.ts'
 import { errorHandlerPlugin } from './plugins/errorHandler.ts'
+import { rateLimitPlugin } from './plugins/rateLimit.ts'
 import { requestIdPlugin } from './plugins/requestId.ts'
+import { dropsRoutes } from './routes/drops/index.ts'
 import { healthRoute } from './routes/health.ts'
+import { accountRoutes } from './routes/account/index.ts'
 import { webhooksRoutes } from './routes/webhooks/index.ts'
 
 export async function buildApp() {
@@ -41,6 +44,7 @@ export async function buildApp() {
 	await app.register(errorHandlerPlugin)
 	await app.register(requestIdPlugin)
 	await app.register(authPlugin)
+	await app.register(rateLimitPlugin)
 
 	// OpenAPI
 	await app.register(fastifySwagger, {
@@ -66,6 +70,8 @@ export async function buildApp() {
 	// Routes
 	await app.register(healthRoute)
 	await app.register(webhooksRoutes)
+	await app.register(dropsRoutes)
+	await app.register(accountRoutes)
 
 	return app
 }
