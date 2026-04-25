@@ -43,6 +43,15 @@ export const webhooksDb = {
     return true
   },
 
+  /** Hard-delete all webhook rows for a customer (GDPR purge — Story 16.5). */
+  deleteByCustomer(customerId: string): void {
+    for (const [id, row] of store.entries()) {
+      if (row.customer_id === customerId) {
+        store.delete(id)
+      }
+    }
+  },
+
   /** Clears all entries — for testing only */
   _reset(): void {
     store.clear()

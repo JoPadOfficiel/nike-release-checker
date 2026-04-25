@@ -179,9 +179,15 @@ describe('dropEvents WebSocket — Story 17.4', () => {
     const ws = await app.injectWS(`/v1/drops/${drop.id}/events?api_key=${VALID_TOKEN}`)
     const closePromise = onClose(ws)
 
-    // Wait for snapshot, then stub bufferedAmount and trigger a bus publish
-    await new Promise<void>((r) => setTimeout(r, 50))
-    Object.defineProperty(ws, 'bufferedAmount', { get: () => 2_000_000, configurable: true })
+    // Wait for the server to attach the WS, then stub bufferedAmount on the
+    // SERVER-side socket (the safeSend check runs server-side).
+    await new Promise<void>((r) => setTimeout(r, 80))
+    for (const serverSocket of app.websocketServer.clients) {
+      Object.defineProperty(serverSocket, 'bufferedAmount', {
+        get: () => 2_000_000,
+        configurable: true,
+      })
+    }
 
     dropEventBus.publish(drop.id, {
       event: 'drop.armed',

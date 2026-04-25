@@ -3,9 +3,12 @@ import React, { useMemo, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { CheckoutResult } from './SummaryScreen.tsx'
 import type { ReportStatus } from '../logger/reportWriter.ts'
+import type { RetryController } from '../checkout/retryController.ts'
 
 export interface RetrySelectionProps {
 	failed: CheckoutResult[]
+	/** Optional controller — when supplied, accounts at max retries render as disabled. */
+	retryController?: RetryController
 	onConfirm: (selected: CheckoutResult[]) => void
 	onCancel: () => void
 }
@@ -24,6 +27,7 @@ export interface RetrySelectionProps {
  */
 export const RetrySelection: React.FC<RetrySelectionProps> = ({
 	failed,
+	retryController,
 	onConfirm,
 	onCancel,
 }) => {
@@ -67,6 +71,8 @@ export const RetrySelection: React.FC<RetrySelectionProps> = ({
 		if (input === ' ') {
 			const row = failed[cursor]
 			if (!row) return
+			// Prevent toggling accounts that have reached the max-retry cap.
+			if (retryController && !retryController.canRetry(row.accountId)) return
 			setSelected((prev) => {
 				const next = new Set(prev)
 				if (next.has(row.accountId)) next.delete(row.accountId)
@@ -88,12 +94,14 @@ export const RetrySelection: React.FC<RetrySelectionProps> = ({
 				{failed.map((r, i) => {
 					const isCursor = i === cursor
 					const isChecked = selected.has(r.accountId)
+					const atMax = retryController ? !retryController.canRetry(r.accountId) : false
 					return (
 						<Box key={r.accountId}>
 							<Text>{isCursor ? '>' : ' '} </Text>
 							<Text>{isChecked ? '[x]' : '[ ]'} </Text>
-							<Text>{r.accountId.padEnd(maxIdLen)} </Text>
-							<Text color='red'>{r.status}</Text>
+							<Text dimColor={atMax}>{r.accountId.padEnd(maxIdLen)} </Text>
+							<Text color={atMax ? undefined : 'red'}>{r.status}</Text>
+							{atMax ? <Text dimColor> (max retries reached)</Text> : null}
 						</Box>
 					)
 				})}

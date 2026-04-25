@@ -7,6 +7,7 @@ import { runCheckoutPipeline, type CheckoutPipelineResult } from './checkoutPipe
 import type { AccountConfig } from '../config/accountSchema.ts'
 import { globalBus, type AccountStatus } from '../tui/eventBus.ts'
 import type { FinalOutcome } from './outcomeClassifier.ts'
+import type { RetryController } from './retryController.ts'
 
 export interface ParallelCheckoutOptions {
   productUrl: string
@@ -22,6 +23,17 @@ export interface ParallelCheckoutOptions {
    * creating fresh ones, eliminating Playwright bootstrap time at T=0.
    */
   preLaunchedContexts?: Map<string, unknown>
+  /**
+   * Retry controller — when present, each emitted `accountStatusChanged` event
+   * is tagged with the current attempt number so the dashboard can display
+   * "(retry 2/3)" in the details column.
+   */
+  retryController?: RetryController
+  /**
+   * Custom proxy resolver — when provided, used instead of the default pool
+   * lookup so the retry loop can apply per-account rotation policy.
+   */
+  proxyResolver?: (acc: AccountConfig) => string | null
 }
 
 export interface ParallelCheckoutSummary {
@@ -37,7 +49,7 @@ export async function runParallelCheckout(
   options: ParallelCheckoutOptions,
 ): Promise<ParallelCheckoutSummary> {
   const summaryStart = performance.now()
-  const { productUrl, dryRun = false, configPath, selectorsPath } = options
+  const { productUrl, dryRun = false, configPath, selectorsPath, retryController } = options
 
   if (dryRun) {
     console.log('⚠️ DRY-RUN MODE — orders will NOT be placed')
@@ -67,11 +79,21 @@ export async function runParallelCheckout(
 
   // Emit initial waiting status for each account so the TUI dashboard
   // can flip the row from pending to waiting once the pipeline starts.
+  // When a retryController is present, emit 'retrying' so the dashboard
+  // displays the current attempt number in the details column.
   for (const account of accounts) {
-    globalBus.emit('accountStatusChanged', {
-      accountId: account.id,
-      status: { kind: 'waiting', step: 'selectSize' },
-    })
+    if (retryController) {
+      const attempt = retryController.getAttempts(account.id)
+      globalBus.emit('accountStatusChanged', {
+        accountId: account.id,
+        status: { kind: 'retrying', step: 'selectSize', attempt },
+      })
+    } else {
+      globalBus.emit('accountStatusChanged', {
+        accountId: account.id,
+        status: { kind: 'waiting', step: 'selectSize' },
+      })
+    }
   }
 
   // MUST use Promise.allSettled — never Promise.all

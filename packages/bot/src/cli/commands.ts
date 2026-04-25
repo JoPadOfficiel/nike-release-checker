@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { Command } from 'commander'
+import type { CheckoutResult } from '../tui/SummaryScreen.tsx'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json') as { version: string }
@@ -736,6 +737,8 @@ program
 			const { render } = await import('ink')
 			const { Dashboard } = await import('../tui/Dashboard.tsx')
 			const { renderSummary } = await import('../tui/renderSummary.tsx')
+				const { renderRetrySelection } = await import('../tui/renderRetrySelection.tsx')
+				const { RetryController } = await import('../checkout/retryController.ts')
 
 			const configPath = program.opts<{ config: string }>().config
 			const dryRun = opts.dryRun ?? false
@@ -811,45 +814,82 @@ program
 					console.log(`[run] ${drop.sku} → ${skuResolved.productUrl}`)
 
 					const startedAt = new Date()
+					const retryController = new RetryController()
 
-					// Mount the Dashboard. parallelCheckout already emits to globalBus;
-					// the Dashboard subscribes and renders live row-by-row updates.
-					const dashboardApp = render(
-						React.createElement(Dashboard, {
-							sku: drop.sku,
-							sizes: drop.sizes,
-							accountIds: accounts.map((a) => a.id),
-							onFinished: () => {
-								/* noop — we drive the lifecycle from the parallel run below */
-							},
-						}),
-					)
+					// Helper: run parallelCheckout and return flat CheckoutResult[].
+					const runCheckout = async (
+						runAccounts: typeof accounts,
+					): Promise<CheckoutResult[]> => {
+						const dashApp = render(
+							React.createElement(Dashboard, {
+								sku: drop.sku,
+								sizes: drop.sizes,
+								accountIds: runAccounts.map((a) => a.id),
+								onFinished: () => { /* noop */ },
+							}),
+						)
 
-					let summary
-					try {
-						summary = await runParallelCheckout({
-							productUrl: skuResolved.productUrl,
-							targetSizes: drop.sizes,
-							dryRun,
-							configPath,
-							selectorsPath: opts.selectors,
-							accounts,
-						})
-					} finally {
-						dashboardApp.unmount()
-						await dashboardApp.waitUntilExit().catch(() => undefined)
+						let sum
+						try {
+							sum = await runParallelCheckout({
+								productUrl: skuResolved.productUrl,
+								targetSizes: drop.sizes,
+								dryRun,
+								configPath,
+								selectorsPath: opts.selectors,
+								accounts: runAccounts,
+								retryController,
+							})
+						} finally {
+							dashApp.unmount()
+							await dashApp.waitUntilExit().catch(() => undefined)
+						}
+
+						return sum.results.map((p) => toCheckoutResult(p, drop.sku))
 					}
 
-					// 5. Adapt → flat CheckoutResult[] and render the final summary screen.
-					const results = summary.results.map((p) =>
-						toCheckoutResult(p, drop.sku),
-					)
+					// 5. Initial run.
+					const results = await runCheckout(accounts)
 
-					await renderSummary(results, startedAt, {
-						retryHandler: () => {
-							// TODO: integrate RetryController + RetrySelection (Story 11.5)
-						},
-					})
+					// Accumulate all results across original + retry rounds.
+					const allResults: CheckoutResult[] = [...results]
+
+					// Retry loop: summary → [R] → retry selection → dashboard → summary → ...
+					// `savedReportFile` tracks the CSV created on the first summary render
+					// so subsequent renders append to it rather than creating new files.
+					let savedReportFile: string | undefined
+
+					const retryHandler = async (failed: CheckoutResult[]): Promise<void> => {
+						const selected = await renderRetrySelection(failed, retryController)
+						if (selected.length === 0) return
+
+						const eligible = retryController.filterRetriable(selected)
+						const skipped = selected.length - eligible.length
+						if (skipped > 0) {
+							process.stderr.write(`[run] ${skipped} account(s) at max retries — skipped\n`)
+						}
+						if (eligible.length === 0) return
+
+						for (const r of eligible) retryController.recordAttempt(r.accountId)
+
+						const retryAccounts = eligible
+							.map((r) => accounts.find((a) => a.id === r.accountId))
+							.filter((a): a is NonNullable<typeof a> => a !== undefined)
+
+						const retryResults = await runCheckout(retryAccounts)
+						allResults.push(...retryResults)
+
+						// Re-render summary with the full accumulated results; append to same CSV.
+						const newPath = await renderSummary(allResults, startedAt, {
+							retryHandler,
+							reportFile: savedReportFile,
+							retryController,
+						})
+						if (newPath) savedReportFile = newPath
+					}
+
+					const firstPath = await renderSummary(allResults, startedAt, { retryHandler, retryController })
+					if (firstPath) savedReportFile = firstPath
 				}
 
 				// TODO: integrate WarmupController for scheduled drops (T-5:00 lead)

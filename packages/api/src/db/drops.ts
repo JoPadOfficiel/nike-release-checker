@@ -168,6 +168,51 @@ export const dropsDb = {
     return { data: page, cursor: nextCursor }
   },
 
+  /**
+   * Returns true if the customer has any drops in ACTIVE or SCHEDULED state.
+   * Used by the GDPR delete endpoint to block deletion (Story 16.5).
+   */
+  hasActiveOrScheduled(customerId: string): boolean {
+    for (const row of dropsStore.values()) {
+      if (
+        row.customer_id === customerId &&
+        (row.state === 'ACTIVE' || row.state === 'SCHEDULED')
+      ) {
+        return true
+      }
+    }
+    return false
+  },
+
+  /**
+   * Anonymize drop rows for a customer (GDPR purge — Story 16.5).
+   * SKU/sizes are not PII and are preserved. payment_method_id is cleared.
+   * The customer_id FK stays intact while the customer row exists (soft-delete window).
+   */
+  anonymizeByCustomer(customerId: string): void {
+    for (const [id, row] of dropsStore.entries()) {
+      if (row.customer_id === customerId) {
+        dropsStore.set(id, { ...row, payment_method_id: '' })
+      }
+    }
+  },
+
+  /**
+   * Null out customer_id on orders for a customer (pre-hard-purge anonymisation — Story 16.5).
+   * Preserves nike_order_number, total_amount_cents, currency, created_at per NFR33.
+   */
+  anonymizeOrdersByCustomer(customerId: string): void {
+    for (const [id, order] of ordersStore.entries()) {
+      if (order.customer_id === customerId) {
+        // customer_id is typed as string but we store null to represent anonymized billing rows.
+        // We use unknown cast because the in-memory store type predates the nullable migration.
+        const anon = { ...order } as Record<string, unknown>
+        anon['customer_id'] = null
+        ordersStore.set(id, anon as unknown as OrderRow)
+      }
+    }
+  },
+
   /** For testing only */
   _reset(): void {
     dropsStore.clear()

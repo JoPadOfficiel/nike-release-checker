@@ -191,6 +191,15 @@ export const cardsDb = {
     }
   },
 
+  /** Hard-delete all card rows belonging to a customer (GDPR purge — Story 16.5). */
+  deleteByCustomer(customerId: string): void {
+    for (const [id, row] of store.entries()) {
+      if (row.customer_id === customerId) {
+        store.delete(id)
+      }
+    }
+  },
+
   // ---------------------------------------------------------------------------
   // Test helpers
   // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
  * Story 16.x will replace this with a real Postgres implementation.
  */
 
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { provisionDek } from '../crypto/dek.ts'
 
 export interface CustomerRow {
@@ -54,6 +54,42 @@ export const customersDb = {
 		}
 		store.set(id, row)
 		return row
+	},
+
+	/** Soft-delete a customer: sets deleted_at (GDPR Story 16.5). */
+	softDelete(id: string, deletedAt: Date): void {
+		const row = store.get(id)
+		if (row != null) {
+			store.set(id, { ...row, deleted_at: deletedAt })
+		}
+	},
+
+	/**
+	 * Return customers whose deleted_at is older than 30 days (due for hard-purge).
+	 * In production this maps to: WHERE deleted_at <= now() - INTERVAL '30 days'
+	 */
+	findDueForHardPurge(now: Date = new Date()): CustomerRow[] {
+		const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+		return [...store.values()].filter(
+			(r) => r.deleted_at != null && r.deleted_at <= cutoff,
+		)
+	},
+
+	/**
+	 * Overwrite dek_wrapped and dek_salt with random bytes of the same length.
+	 * Called just before hard-purge so any DB backup taken after cannot decrypt residual ciphertext.
+	 */
+	scrambleDekWrapped(id: string): void {
+		const row = store.get(id)
+		if (row == null) return
+		const newWrapped = row.dek_wrapped != null ? randomBytes(row.dek_wrapped.length) : randomBytes(32)
+		const newSalt = row.dek_salt != null ? randomBytes(row.dek_salt.length) : randomBytes(32)
+		store.set(id, { ...row, dek_wrapped: newWrapped, dek_salt: newSalt })
+	},
+
+	/** Hard-delete a customer row (cascades to child tables in production). */
+	delete(id: string): void {
+		store.delete(id)
 	},
 
 	/** Seed a customer for testing / bootstrapping. */

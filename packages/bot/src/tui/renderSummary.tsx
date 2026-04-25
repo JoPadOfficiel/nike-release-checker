@@ -4,8 +4,9 @@ import { render } from 'ink'
 import { SummaryScreen } from './SummaryScreen.tsx'
 import type { CheckoutResult } from './SummaryScreen.tsx'
 import { writeReport } from '../logger/reportWriter.ts'
+import type { RetryController } from '../checkout/retryController.ts'
 
-function toReportRow(r: CheckoutResult) {
+function toReportRow(r: CheckoutResult, retryController?: RetryController) {
 	return {
 		account_id: r.accountId,
 		status: r.status,
@@ -15,11 +16,20 @@ function toReportRow(r: CheckoutResult) {
 		timestamp: new Date().toISOString(),
 		error_reason: r.errorReason,
 		duration_ms: r.durationMs,
+		retry_attempt: retryController?.getAttempts(r.accountId),
 	}
 }
 
 export interface RenderSummaryOptions {
-	retryHandler: (failed: CheckoutResult[]) => void
+	retryHandler: (failed: CheckoutResult[]) => void | Promise<void>
+	/**
+	 * When provided, retry rows are appended to this existing CSV file
+	 * instead of creating a new one. Set by the caller after the first
+	 * report write so the whole drop stays in one file.
+	 */
+	reportFile?: string
+	/** Retry controller — used to populate `retry_attempt` column in report. */
+	retryController?: RetryController
 }
 
 /**
@@ -28,21 +38,30 @@ export interface RenderSummaryOptions {
  * The report is written BEFORE the screen renders so that [O] opens a folder
  * that actually contains the file. If the write fails we still render the
  * screen with a fallback path so the user can exit cleanly (NFR24).
+ *
+ * On retry rounds the caller passes `reportFile` so rows are appended to the
+ * same CSV rather than creating a second file.
  */
 export async function renderSummary(
 	results: CheckoutResult[],
 	startedAt: Date,
 	opts: RenderSummaryOptions,
-): Promise<void> {
+): Promise<string | undefined> {
 	const endedAt = new Date()
 
-	let reportPath: string
+	let reportPath: string | undefined
 	try {
-		reportPath = await writeReport(results.map(toReportRow), './reports')
+		if (opts.reportFile) {
+			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), './reports', {
+				appendToFile: opts.reportFile,
+			})
+		} else {
+			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), './reports')
+		}
 	} catch (err: unknown) {
 		const msg = err instanceof Error ? err.message : String(err)
 		process.stderr.write(`[summary] writeReport failed: ${msg}\n`)
-		reportPath = '(save failed — see logs)'
+		reportPath = opts.reportFile ?? '(save failed — see logs)'
 	}
 
 	const { waitUntilExit } = render(
@@ -50,10 +69,12 @@ export async function renderSummary(
 			results,
 			startedAt,
 			endedAt,
-			reportPath,
+			reportPath: reportPath ?? '(save failed — see logs)',
 			onRetry: opts.retryHandler,
 			onQuit: () => process.exit(0),
 		}),
 	)
 	await waitUntilExit()
+
+	return reportPath
 }

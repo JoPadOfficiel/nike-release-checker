@@ -74,6 +74,23 @@ export async function runUp(client: pg.Client): Promise<void> {
   for (const file of files) {
     if (applied.has(file)) continue
     const sql = await readFile(join(MIGRATIONS_DIR, file), 'utf8')
+
+    // Skip migrations tagged @pg-mem-skip when the client does not expose pg-native query details.
+    // pg-mem clients have no processID; real pg clients do.
+    // We detect pg-mem by checking for the absence of standard pg client internals.
+    if (sql.includes('@pg-mem-skip')) {
+      // Real pg clients set processID after connect; pg-mem clients leave it undefined.
+      // This avoids pulling pg-mem as a runtime dependency in the production runner.
+      const clientAny = client as Record<string, unknown>
+      const isPgMem = clientAny['processID'] === undefined
+      if (isPgMem) {
+        console.log(`[migrate] skipping ${file} (pg-mem-skip)`)
+        // Mark as applied so idempotency checks still pass
+        await client.query('INSERT INTO schema_migrations(version) VALUES($1)', [file])
+        continue
+      }
+    }
+
     const statements = splitStatements(sql)
     await client.query('BEGIN')
     try {

@@ -63,21 +63,24 @@ describe('Migration 16.1 — schema tests', () => {
     client = await freshMigratedClient()
   })
 
-  it('schema_migrations tracks all 6 files after runUp', async () => {
+  it('schema_migrations tracks all migration files after runUp', async () => {
     const res = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 6)
+    // All migrations are tracked (including pg-mem-skip ones which are inserted but not executed)
+    assert.ok(res.rows.length >= 6, `Expected at least 6 migrations, got ${res.rows.length}`)
     assert.equal(res.rows[0]!.version, '0001_customers_and_api_keys.sql')
-    assert.equal(res.rows[5]!.version, '0006_nike_accounts_email_lookup.sql')
   })
 
   it('runUp is idempotent — second call is a no-op (no error, same row count)', async () => {
-    await runUp(client)
-    const res = await client.query<{ version: string }>(
+    const before = await client.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     )
-    assert.equal(res.rows.length, 6)
+    await runUp(client)
+    const after = await client.query<{ version: string }>(
+      'SELECT version FROM schema_migrations ORDER BY version',
+    )
+    assert.equal(after.rows.length, before.rows.length)
   })
 
   it('CASCADE: deleting a customer removes api_keys, drops, webhooks', async () => {

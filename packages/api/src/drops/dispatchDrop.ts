@@ -9,6 +9,7 @@
 import { dropsDb } from '../db/drops.ts'
 import { dropRunRepository, allRunsTerminal } from './dropRunRepository.ts'
 import { transitionState } from './dropRepository.ts'
+import type { BrowserContextHandle } from '../warmup/warmupCoordinator.ts'
 
 // ---------------------------------------------------------------------------
 // In-memory nike_accounts stub
@@ -69,6 +70,16 @@ function parseAccountsFilter(raw: unknown): AccountsFilter {
 // dispatchDrop
 // ---------------------------------------------------------------------------
 
+export interface DispatchOpts {
+  /**
+   * Pre-launched Playwright contexts from WarmupCoordinator (Story 17.5).
+   * When present, workers reuse these instead of creating new contexts.
+   * Keyed by nikeAccountId. The worker that finalizes a run is responsible
+   * for calling ctx.close() — not the dispatcher.
+   */
+  preLaunchedContexts?: Map<string, BrowserContextHandle>
+}
+
 export interface DispatchDeps {
   logger?: {
     info(data: Record<string, unknown>, msg: string): void
@@ -95,9 +106,13 @@ function defaultLogger() {
  */
 export async function dispatchDrop(
   dropId: string,
-  deps?: DispatchDeps,
+  opts?: DispatchOpts & DispatchDeps,
 ): Promise<void> {
-  const logger = deps?.logger ?? defaultLogger()
+  const logger = opts?.logger ?? defaultLogger()
+  // opts.preLaunchedContexts: Pre-launched Playwright contexts from WarmupCoordinator.
+  // The worker pool (Story 17.3+) reads opts.preLaunchedContexts.get(nikeAccountId)
+  // before creating a new context. Currently stored on opts — workers access via opts directly.
+  // (No local variable here to avoid noUnusedLocals.)
 
   // We look up the drop without customer scoping because the scheduler owns
   // the call site and the drop is already trusted-ACTIVE.

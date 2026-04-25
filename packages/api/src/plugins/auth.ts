@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { apiKeysDb } from '../db/apiKeys.ts'
+import { customersDb } from '../db/customers.ts'
 
 // Extend Fastify's request type to carry resolved auth context.
 declare module 'fastify' {
@@ -105,6 +106,15 @@ async function _authPlugin(app: FastifyInstance): Promise<void> {
 				.code(403)
 				.type('application/problem+json')
 				.send(problem('auth-revoked', 403))
+		}
+
+		// Belt-and-braces: if the customer row is soft-deleted, treat token as revoked.
+		const customer = customersDb.findById(row.customer_id)
+		if (customer?.deleted_at != null) {
+			return reply
+				.code(401)
+				.type('application/problem+json')
+				.send(problem('auth-revoked', 401))
 		}
 
 		req.customerId = row.customer_id

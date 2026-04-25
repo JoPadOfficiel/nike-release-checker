@@ -280,6 +280,15 @@ export const nikeAccountsDb = {
     })
   },
 
+  /** Hard-delete all Nike account rows for a customer (GDPR purge — Story 16.5). */
+  deleteByCustomer(customerId: string): void {
+    for (const [id, row] of store.entries()) {
+      if (row.customer_id === customerId) {
+        store.delete(id)
+      }
+    }
+  },
+
   // ---------------------------------------------------------------------------
   // Test helpers
   // ---------------------------------------------------------------------------

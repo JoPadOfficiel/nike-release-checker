@@ -58,6 +58,15 @@ export const apiKeysDb = {
 			}))
 	},
 
+	/** Revoke all active API keys for a customer (GDPR soft-delete — Story 16.5). */
+	revokeAllForCustomer(customerId: string, revokedAt: Date = new Date()): void {
+		for (const row of store.values()) {
+			if (row.customer_id === customerId && row.revoked_at == null) {
+				store.set(row.key_id, { ...row, revoked_at: revokedAt })
+			}
+		}
+	},
+
 	/** Clear all keys — used between tests. */
 	_clear(): void {
 		store.clear()

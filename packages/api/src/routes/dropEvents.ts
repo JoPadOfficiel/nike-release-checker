@@ -169,6 +169,9 @@ async function _dropEventsRoute(app: FastifyInstance): Promise<void> {
         }
         socket.ping()
       }, PING_INTERVAL_MS)
+      // Don't keep the event loop alive solely for the heartbeat timer —
+      // tests and graceful shutdown rely on this.
+      heartbeat.unref()
 
       // ── Cleanup ───────────────────────────────────────────────────────────
       socket.on('close', () => {

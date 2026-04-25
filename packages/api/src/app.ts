@@ -14,6 +14,8 @@ import { accountRoutes } from './routes/account/index.ts'
 import { cardsRoutes } from './routes/account/cards.ts'
 import { nikeAccountsRoutes } from './routes/account/nikeAccounts.ts'
 import { webhooksRoutes } from './routes/webhooks/index.ts'
+import { gdprRoutes } from './routes/account/gdpr.ts'
+import { startGdprPurger, stopGdprPurger } from './workers/gdprPurger.ts'
 import { createDropScheduler } from './scheduler/dropScheduler.ts'
 import { NoopWorkerPoolClient } from './scheduler/workerPoolClient.ts'
 
@@ -82,14 +84,17 @@ export async function buildApp() {
 	await app.register(accountRoutes)
 	await app.register(cardsRoutes)
 	await app.register(nikeAccountsRoutes)
+	await app.register(gdprRoutes)
 
 	// Scheduler lifecycle — start on ready, stop on close
 	const scheduler = createDropScheduler({ workerPool: new NoopWorkerPoolClient() })
 	app.addHook('onReady', async () => {
 		await scheduler.start()
+		startGdprPurger()
 	})
 	app.addHook('onClose', async () => {
 		await scheduler.stop()
+		stopGdprPurger()
 	})
 
 	return app
