@@ -74,10 +74,16 @@ export async function createRealCheckoutContext(
     // navigation overhead per checkout.
     if (injectedSnapshot) {
       const page = handle.context.pages()[0] ?? (await handle.context.newPage())
-      const cookies = await page.context().cookies('https://www.nike.com')
-      const hasSid = cookies.some((c) => c.name === 'sid')
-      const hasOidc = cookies.some((c) => c.name.startsWith('oidc.'))
-      console.log(`  [auth] cookie check: sid=${hasSid}, oidc=${hasOidc}`)
+      // Nike sets `sid` on accounts.nike.com (not www.nike.com), so query both origins
+      // to cover the full SPA + OAuth surface.
+      const allCookies = await page.context().cookies([
+        'https://www.nike.com',
+        'https://accounts.nike.com',
+        'https://api.nike.com',
+      ])
+      const hasSid = allCookies.some((c) => c.name === 'sid')
+      const hasOidc = allCookies.some((c) => c.name.startsWith('oidc.'))
+      console.log(`  [auth] cookie check (multi-origin): sid=${hasSid}, oidc=${hasOidc}, total=${allCookies.length}`)
       if (!hasSid) {
         throw new Error(`Session snapshot missing for account '${accountId}'. Run 'nike-bot capture-session --account ${accountId}' to refresh.`)
       }
