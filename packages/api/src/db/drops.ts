@@ -2,7 +2,17 @@ import { randomUUID } from 'node:crypto'
 
 // In-memory store (replaced by Postgres in Story 16.x)
 
-export type DropState = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
+// Canonical state enum — extended in Story 17.1 to cover full lifecycle.
+// ARMED, ARCHIVED added; FAILED kept for backwards compat with in-flight runs.
+export type DropState =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'ARMED'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'FAILED'
+  | 'ARCHIVED'
 
 export interface DropRow {
   id: string

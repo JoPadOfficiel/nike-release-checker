@@ -104,6 +104,14 @@ export async function runParallelCheckout(
         const lastStep = result.steps[result.steps.length - 1]
         console.log(`  ✗ ${maskedEmail} — ${result.finalOutcome}${lastStep?.error ? ` (${lastStep.error})` : ''}`)
       }
+      // Emit per-step events so the TUI can show granular progress per account.
+      for (const step of result.steps) {
+        globalBus.emit('stepCompleted', {
+          accountId: account.id,
+          step: step.step,
+          durationMs: step.durationMs,
+        })
+      }
       globalBus.emit('accountStatusChanged', {
         accountId: account.id,
         status: finalOutcomeToStatus(result.finalOutcome, targetSizes),

@@ -11,8 +11,10 @@
 		"build": "tsc -p tsconfig.build.json",
 		"start": "node dist/index.js",
 		"worker": "node dist/workers/index.js",
-		"test": "node --import tsx --test 'src/**/*.test.ts'",
-		"typecheck": "tsc --noEmit"
+		"test": "node --import tsx --test 'src/**/*.test.ts' 'migrations/**/*.test.ts'",
+		"typecheck": "tsc --noEmit",
+		"migrate": "node --import tsx migrations/runner.ts up",
+		"migrate:rollback": "node --import tsx migrations/runner.ts down 1"
 	},
 	"dependencies": {
 		"@fastify/swagger": "^9.0.0",
@@ -20,13 +22,17 @@
 		"argon2": "0.44.0",
 		"fastify": "^5.0.0",
 		"ioredis": "5.10.1",
+		"node-pg-migrate": "8.0.4",
+		"pg": "8.20.0",
 		"pino": "^9.0.0",
 		"uuid": "^11.0.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.0.0",
+		"@types/pg": "8.20.0",
 		"@types/uuid": "^10.0.0",
 		"ioredis-mock": "8.13.1",
+		"pg-mem": "3.0.14",
 		"tsx": "^4.0.0",
 		"typescript": "^5.9.3"
 	}
