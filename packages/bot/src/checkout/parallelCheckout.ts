@@ -16,6 +16,12 @@ export interface ParallelCheckoutOptions {
   selectorsPath?: string
   /** Override accounts list (useful for testing) */
   accounts?: AccountConfig[]
+  /**
+   * Pre-launched Playwright contexts produced by the warmup phase (Story 11.3).
+   * When provided the checkout pipeline reuses these contexts instead of
+   * creating fresh ones, eliminating Playwright bootstrap time at T=0.
+   */
+  preLaunchedContexts?: Map<string, unknown>
 }
 
 export interface ParallelCheckoutSummary {

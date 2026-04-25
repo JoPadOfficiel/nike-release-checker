@@ -2,16 +2,10 @@
 import { useEffect, useState, type FC } from 'react'
 import { Box, Text } from 'ink'
 import type { WarmupController, WarmupProgress } from '../monitor/warmupMode.ts'
+import { useInterval } from './useInterval.ts'
 
 // TODO: swap for `./primitives/Spinner.tsx` once Story 11-2 merges.
-const Spinner: FC = () => <Text>⠋</Text>
-
-function useInterval(cb: () => void, ms: number): void {
-	useEffect(() => {
-		const t = setInterval(cb, ms)
-		return () => clearInterval(t)
-	}, [cb, ms])
-}
+const Spinner: FC = () => <Text>...</Text>
 
 function fmtCountdown(seconds: number): string {
 	if (seconds <= 0) return 'T-00:00'
@@ -101,7 +95,7 @@ interface RowProps {
 const Row: FC<RowProps> = ({ done, active, label }) => (
 	<Box>
 		<Text color={done ? 'green' : active ? 'yellow' : 'gray'}>
-			{done ? '[✓]' : active ? '[  ]' : '[ ]'}
+			{done ? '[v]' : active ? '[  ]' : '[ ]'}
 		</Text>
 		{active && !done ? (
 			<Text>

@@ -9,6 +9,7 @@ import { requestIdPlugin } from './plugins/requestId.ts'
 import { dropsRoutes } from './routes/drops/index.ts'
 import { healthRoute } from './routes/health.ts'
 import { accountRoutes } from './routes/account/index.ts'
+import { cardsRoutes } from './routes/account/cards.ts'
 import { webhooksRoutes } from './routes/webhooks/index.ts'
 import { createDropScheduler } from './scheduler/dropScheduler.ts'
 import { NoopWorkerPoolClient } from './scheduler/workerPoolClient.ts'
@@ -74,6 +75,7 @@ export async function buildApp() {
 	await app.register(webhooksRoutes)
 	await app.register(dropsRoutes)
 	await app.register(accountRoutes)
+	await app.register(cardsRoutes)
 
 	// Scheduler lifecycle — start on ready, stop on close
 	const scheduler = createDropScheduler({ workerPool: new NoopWorkerPoolClient() })

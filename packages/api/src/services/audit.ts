@@ -15,7 +15,7 @@ function redact(body: unknown): unknown {
 }
 
 export const audit = {
-  log(req: FastifyRequest, action: string, resourceId: string): void {
+  log(req: FastifyRequest, action: string, resourceId: string, extra?: Record<string, unknown>): void {
     try {
       req.log.info({
         audit: true,
@@ -25,6 +25,7 @@ export const audit = {
         resource_type: 'drop',
         resource_id: resourceId,
         payload_redacted: redact(req.body as unknown),
+        ...(extra != null ? { payload_extra: extra } : {}),
       })
     } catch (err) {
       req.log.warn({ err }, 'audit.log failed — non-blocking')

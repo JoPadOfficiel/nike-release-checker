@@ -865,3 +865,82 @@ program
 			}
 		},
 	)
+
+program
+	.command('warmup')
+	.description(
+		'Pre-drop warmup: countdown + session validation + context pre-launch before a scheduled drop',
+	)
+	.requiredOption('--sku <sku>', 'Nike SKU / styleColor to watch (e.g. IQ7604-101)')
+	.requiredOption('--drop-time <iso>', 'Scheduled drop time in ISO 8601 format (e.g. 2026-05-01T10:00:00Z)')
+	.option('--sizes <sizes>', 'Target EU sizes comma-separated (e.g. 40,40.5,41)')
+	.option('--lead-seconds <s>', 'Warmup lead time in seconds before drop (default: 300)', '300')
+	.option('--dry-run', 'Pass dry-run flag to the checkout phase', false)
+	.action(
+		async (opts: {
+			sku: string
+			dropTime: string
+			sizes?: string
+			leadSeconds: string
+			dryRun?: boolean
+		}) => {
+			const { maskCredentials } = await import('../logger/credentialMasker.ts')
+			const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+			const { WarmupController } = await import('../monitor/warmupMode.ts')
+			const { WarmupWidget } = await import('../tui/WarmupWidget.tsx')
+			const { renderComponent, renderDashboard } = await import('../tui/renderDashboard.tsx')
+			const { runParallelCheckout } = await import('../checkout/parallelCheckout.ts')
+			const configPath = program.opts<{ config: string }>().config
+
+			try {
+				const dropTime = new Date(opts.dropTime)
+				if (Number.isNaN(dropTime.getTime())) {
+					console.error('❌ Invalid --drop-time; expected ISO 8601 format.')
+					process.exit(1)
+				}
+
+				const accounts = await loadStoredAccounts()
+				if (accounts.length === 0) {
+					console.error('No accounts found. Run nike-bot import-accounts first.')
+					process.exit(1)
+				}
+
+				const controller = new WarmupController()
+
+				// Mount warmup TUI.
+				const handle = renderComponent(WarmupWidget, { controller, dropTime })
+
+				const result = await controller.start({
+					dropTime,
+					sku: opts.sku,
+					accounts,
+					leadSeconds: Number(opts.leadSeconds),
+				})
+
+				handle.unmount()
+
+				// Transition to live dashboard + checkout.
+				const productUrl = `https://www.nike.com/fr/launch/t/${result.slug}`
+				const targetSizes = opts.sizes?.split(',').map((s) => s.trim()).filter(Boolean) ?? []
+
+				const dashHandle = renderDashboard({
+					sku: opts.sku,
+					sizes: targetSizes,
+					accountIds: result.validAccounts.map((a) => a.id),
+					onFinished: () => { /* dashboard handles exit */ },
+				})
+				await runParallelCheckout({
+					productUrl,
+					targetSizes,
+					dryRun: opts.dryRun ?? false,
+					configPath,
+					accounts: result.validAccounts,
+					preLaunchedContexts: result.contexts,
+				})
+				dashHandle.unmount()
+			} catch (err) {
+				console.error(`❌ Warmup failed: ${maskCredentials(String(err))}`)
+				process.exit(1)
+			}
+		},
+	)
