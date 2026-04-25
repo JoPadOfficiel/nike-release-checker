@@ -135,12 +135,14 @@ export async function completePayment(
 				], card.holderName)
 			}
 
-			const paymentButton = page.locator(selectors.checkout.paymentContinueButton)
-			const isVisible = await paymentButton.isVisible()
-			const isEnabled = await paymentButton.isEnabled()
-
-			if (!isVisible || !isEnabled) {
-				throw Object.assign(new Error('Payment continue button not ready'), { code: 'TIMEOUT' })
+			// Same pattern as completeShipping: use first() + waitFor instead of polling
+			// isVisible/isEnabled (which fail mid-render). Multiple submit buttons live
+			// on the page (Modifier, France selector, etc.) — first() narrows.
+			const paymentButton = page.locator(selectors.checkout.paymentContinueButton).first()
+			try {
+				await paymentButton.waitFor({ state: 'visible', timeout: innerTimeout })
+			} catch {
+				throw Object.assign(new Error('Payment continue button not visible'), { code: 'TIMEOUT' })
 			}
 
 			await naturalClick(page, paymentButton)

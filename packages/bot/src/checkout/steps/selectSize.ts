@@ -44,27 +44,56 @@ export async function selectSize(
       const selectorTimeout = Math.max(Math.floor(timeoutMs * 0.6), 5000)
       await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: selectorTimeout, state: 'attached' })
 
-      // Use locator.filter with regex hasText instead of :text-is(...) in the
-      // selector template. Playwright's :text-is requires exact normalized text
-      // match which fails when the button wraps EU label in nested spans (React
-      // render with whitespace + accessibility text). filter+regex is robust to
-      // those nesting variations.
+      // Nike's size grid uses a <div data-testid="pdp-grid-selector-item">
+      // wrapper containing a hidden <input type="radio"> + visible <label>.
+      // When a size is picked, testid flips to "pdp-grid-selector-item-selected".
+      // We click the LABEL via naturalClick (Kasada-friendly), then verify
+      // the selected variant appeared. If not, fall back to input.check() via
+      // page.evaluate which guarantees the radio is checked.
       const grid = page.locator(selectors.productPage.sizeGrid)
       for (const size of targetSizes) {
-        // Anchored regex so "EU 42" never matches "EU 42.5"
         const escaped = size.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const re = new RegExp(`^\\s*EU\\s+${escaped}\\s*$`)
-        const sizeButton = grid.filter({ hasText: re }).first()
-        const count = await sizeButton.count()
+        const sizeItem = grid.filter({ hasText: re }).first()
+        const count = await sizeItem.count()
         if (count === 0) continue
-        const isVisible = await sizeButton.isVisible().catch(() => false)
-        const isEnabled = await sizeButton.isEnabled().catch(() => false)
-        if (isVisible && isEnabled) {
-          // Use natural mouse movement — Nike's Kasada detects teleported CDP clicks
-          await naturalClick(page, sizeButton)
+        const isVisible = await sizeItem.isVisible().catch(() => false)
+        if (!isVisible) continue
+
+        // Strategy 1: naturalClick on the wrapper div (clicks the visible label)
+        await naturalClick(page, sizeItem).catch(() => {})
+        await page.waitForTimeout(400)
+
+        // Verify selection by looking for the SELECTED variant of the testid
+        const selectedLoc = page
+          .locator('[data-testid="pdp-grid-selector-item-selected"]')
+          .filter({ hasText: re })
+        let selected = (await selectedLoc.count()) > 0
+
+        // Strategy 2 (fallback): trigger the radio input directly via evaluate
+        if (!selected) {
+          await page.evaluate((sz) => {
+            const items = document.querySelectorAll('[data-testid="pdp-grid-selector-item"]')
+            for (const el of items) {
+              if ((el.textContent ?? '').trim() === `EU ${sz}`) {
+                const input = el.querySelector('input[type="radio"]') as HTMLInputElement | null
+                if (input) {
+                  input.click()
+                  input.dispatchEvent(new Event('change', { bubbles: true }))
+                }
+                break
+              }
+            }
+          }, size)
+          await page.waitForTimeout(400)
+          selected = (await selectedLoc.count()) > 0
+        }
+
+        if (selected) {
           selectedSize = size
           return `size:${size}`
         }
+        // If neither strategy selected, try the next target size.
       }
 
       throw Object.assign(

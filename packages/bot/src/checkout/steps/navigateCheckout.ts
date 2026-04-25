@@ -12,10 +12,12 @@ export async function navigateCheckout(
   return executeStep(
     'navigate-checkout',
     async () => {
-      // Navigate to the cart page first — after ATC we're still on the product page.
-      // The checkout button lives on /fr/cart, not on the PDP.
-      const gotoTimeout = Math.max(Math.floor(timeoutMs * 0.3), 3000)
-      await page.goto('https://www.nike.com/fr/cart', { waitUntil: 'domcontentloaded', timeout: gotoTimeout })
+      // Navigate DIRECTLY to /fr/checkout — bypasses the cart-page intermediate
+      // step which is flaky (button disappears mid-render when the cart has
+      // duplicate items from prior runs in the persistent profile). The
+      // checkout page itself reads the cart server-side, so this is equivalent.
+      const gotoTimeout = Math.max(Math.floor(timeoutMs * 0.4), 3000)
+      await page.goto('https://www.nike.com/fr/checkout', { waitUntil: 'domcontentloaded', timeout: gotoTimeout })
       await dismissCookieConsent(page, selectors, 500)
 
       // Check for block detection AFTER navigation (Nike serves block pages here)
@@ -24,19 +26,6 @@ export async function navigateCheckout(
       if (isBlocked) {
         throw Object.assign(new Error('Bot detection signal found'), { code: 'BLOCKED' })
       }
-
-      // Wait for the checkout button to appear on the cart page (JS-rendered)
-      const checkoutButton = page.locator(selectors.cart.checkoutButton)
-      try {
-        await checkoutButton.waitFor({ state: 'visible', timeout: Math.max(Math.floor(timeoutMs * 0.3), 3000) })
-      } catch {
-        throw Object.assign(new Error('Checkout button not visible on cart page'), { code: 'BLOCKED' })
-      }
-
-      await naturalClick(page, checkoutButton)
-
-      // Dismiss cookie modal again on checkout page (new domain context).
-      await dismissCookieConsent(page, selectors, 800)
 
       // Wait for shipping section to appear (confirms we are on checkout page)
       // Use shorter timeout than the executeStep race timer to avoid ghost timeout
