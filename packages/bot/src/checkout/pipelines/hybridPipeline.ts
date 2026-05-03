@@ -25,6 +25,7 @@ import { harvestSkuId } from '../dom/harvestSkuId.ts'
 import { mapErrorToOutcome } from '../mapErrorToOutcome.ts'
 import { RealKpsdkClient } from '../../stealth/kpsdk/protectedFetch.ts'
 import { kpsdkCacheHolder } from '../../stealth/kpsdk/cache.ts'
+import { getKpsdkExtractor } from '../../stealth/kpsdk/extractor.ts'
 import {
 	NikeCartApi,
 	NikeCartViewsApi,
@@ -138,6 +139,10 @@ export async function runHybridPipeline(
 	const retryBase = { page, kpsdkClient, sessionRefresh, logger }
 
 	try {
+		// Attach before the first PDP navigation so Epic 14 token capture sees
+		// the protected requests emitted by Nike's own page scripts.
+		getKpsdkExtractor(page, country)
+
 		// ── Step 1: DOM — PDP navigate + size click ───────────────────────────────
 		globalBus.emit('accountStatusChanged', {
 			accountId: account.id,

@@ -62,6 +62,9 @@ program
 				} else {
 					const msg = maskCredentials(result.error ?? 'unknown error')
 					console.error(`Authenticating ${maskCredentials(result.accountId)}... failed (${msg})`)
+					if (result.failureReason === 'blocked') {
+						console.error(`Nike blocked the automated login flow. Run: nike-bot capture-session --account ${maskCredentials(result.accountId)}`)
+					}
 					process.exit(1)
 				}
 			} else {
@@ -75,6 +78,9 @@ program
 						console.log(`  ✓ ${label} — done (${elapsed})`)
 					} else {
 						console.log(`  ✗ ${label} — failed (${maskCredentials(r.error ?? 'unknown error')})`)
+						if (r.failureReason === 'blocked') {
+							console.log(`    Nike blocked automated login. Run: nike-bot capture-session --account ${label}`)
+						}
 					}
 				}
 				const total = results.length
@@ -126,15 +132,15 @@ program
 			process.exit(1)
 		}
 
-		console.log('Launching real Google Chrome (bypasses Playwright detection)...')
+		console.log('Launching real Google Chrome for manual Nike session capture...')
 		console.log('')
-		console.log('  1. Chrome opens with a persistent profile stored in ~/.nike-bot/chrome-profile')
+		console.log(`  1. Chrome opens with an isolated profile for ${maskCredentials(opts.account)}`)
 		console.log('  2. Navigate to https://www.nike.com/fr and log in with your account')
 		console.log('  3. The bot will automatically detect when the auth cookie is set')
 		console.log('  4. Do NOT close the Chrome window until capture completes')
 		console.log('')
 
-		const { context, close } = await launchRealChrome({ headless: false })
+		const { context, close } = await launchRealChrome({ headless: false, accountId: opts.account })
 
 		// Use the default page that Chrome opens on startup, or create one
 		const existingPages = context.pages()

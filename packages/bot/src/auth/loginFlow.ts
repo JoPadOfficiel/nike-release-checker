@@ -1,10 +1,47 @@
 import type { Page } from 'playwright'
 import type { Selectors } from '../config/selectorSchema.ts'
-import type { LoginResult } from './auth.types.ts'
+import type { LoginFailureReason, LoginResult } from './auth.types.ts'
 import { dismissCookieConsent } from '../checkout/dismissCookies.ts'
 
 const LOGIN_URL = 'https://www.nike.com/fr/register'
 const STEP_TIMEOUT = 20_000
+
+const BLOCKED_ERROR_PATTERNS = [
+	/erreur lors de l'analyse de la reponse du serveur/i,
+	/erreur lors de l’analyse de la réponse du serveur/i,
+	/access denied/i,
+	/akamai/i,
+	/blocked/i,
+	/bot/i,
+	/forbidden/i,
+	/kasada/i,
+]
+
+const INVALID_CREDENTIAL_PATTERNS = [
+	/invalid/i,
+	/incorrect/i,
+	/mot de passe/i,
+	/password/i,
+	/identifiants/i,
+]
+
+function normalizeErrorText(text: string): string {
+	return text
+		.normalize('NFD')
+		.replace(/\p{Diacritic}/gu, '')
+		.replace(/[’']/g, "'")
+}
+
+export function classifyLoginFailure(errorText: string): LoginFailureReason {
+	const normalized = normalizeErrorText(errorText)
+	if (BLOCKED_ERROR_PATTERNS.some((pattern) => pattern.test(errorText) || pattern.test(normalized))) {
+		return 'blocked'
+	}
+	if (INVALID_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(errorText) || pattern.test(normalized))) {
+		return 'invalid_credentials'
+	}
+	return 'error'
+}
 
 async function openLoginForm(page: Page, selectors: Selectors): Promise<void> {
 	await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: STEP_TIMEOUT })
@@ -41,6 +78,7 @@ export async function performNikeLogin(
 			return {
 				success: false,
 				error: `Timeout waiting for password field (${STEP_TIMEOUT}ms)`,
+				failureReason: 'timeout',
 				durationMs: Date.now() - startMs,
 			}
 		}
@@ -52,6 +90,7 @@ export async function performNikeLogin(
 			return {
 				success: false,
 				error: errorText?.trim() ?? 'Login error indicator detected',
+				failureReason: classifyLoginFailure(errorText?.trim() ?? ''),
 				durationMs: Date.now() - startMs,
 			}
 		}
@@ -76,6 +115,7 @@ export async function performNikeLogin(
 			return {
 				success: false,
 				error: `Login timed out waiting for outcome (${STEP_TIMEOUT}ms)`,
+				failureReason: 'timeout',
 				durationMs: Date.now() - startMs,
 			}
 		}
@@ -91,12 +131,13 @@ export async function performNikeLogin(
 			return {
 				success: false,
 				error: errorText?.trim() ?? 'Login error indicator detected',
+				failureReason: classifyLoginFailure(errorText?.trim() ?? ''),
 				durationMs: Date.now() - startMs,
 			}
 		}
 
 		return { success: true, durationMs: Date.now() - startMs }
 	} catch (err) {
-		return { success: false, error: String(err), durationMs: Date.now() - startMs }
+		return { success: false, error: String(err), failureReason: 'error', durationMs: Date.now() - startMs }
 	}
 }

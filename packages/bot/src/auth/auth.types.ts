@@ -1,3 +1,5 @@
+export type LoginFailureReason = 'blocked' | 'invalid_credentials' | 'timeout' | 'error'
+
 export interface ProxyTestResult {
 	success: boolean
 	latencyMs: number
@@ -19,6 +21,7 @@ export interface ImportResult {
 export interface LoginResult {
 	success: boolean
 	error?: string
+	failureReason?: LoginFailureReason
 	durationMs: number
 }
 
@@ -26,6 +29,7 @@ export interface AuthResult {
 	accountId: string
 	success: boolean
 	error?: string
+	failureReason?: LoginFailureReason
 	durationMs: number
 }
 

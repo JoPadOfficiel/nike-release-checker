@@ -135,7 +135,7 @@ async function authenticateAccount(
 	selectors: Selectors,
 ): Promise<AuthResult> {
 	const startMs = Date.now()
-	const context = await createStealthContext({ proxy: account.proxy })
+	const context = await createStealthContext({ proxy: account.proxy, headless: false })
 	try {
 		const page = await context.newPage()
 		const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
@@ -149,6 +149,7 @@ async function authenticateAccount(
 			success: false,
 			// Mask credentials that may appear in Nike's error page text (NFR6)
 			error: maskCredentials(loginResult.error ?? 'unknown error'),
+			failureReason: loginResult.failureReason,
 			durationMs: Date.now() - startMs,
 		}
 	} catch (err) {
@@ -156,6 +157,7 @@ async function authenticateAccount(
 			accountId: account.id,
 			success: false,
 			error: maskCredentials(String(err)),
+			failureReason: 'error',
 			durationMs: Date.now() - startMs,
 		}
 	} finally {
