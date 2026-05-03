@@ -61,7 +61,7 @@ build({
   outfile: 'main.mjs', jsx: 'automatic',
   loader: { '.ts': 'ts', '.tsx': 'tsx' },
   resolveExtensions: ['.ts', '.tsx', '.mjs', '.js', '.cjs', '.json'],
-  external: ['playwright','playwright-core','playwright-extra','rebrowser-playwright','puppeteer-extra-plugin-stealth','better-sqlite3','react-devtools-core'],
+  external: ['playwright','playwright-core','patchright','patchright-core','better-sqlite3','react-devtools-core'],
   banner: { js: \"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" },
   logLevel: 'info',
 }).catch(e => { console.error(e); process.exit(1); });

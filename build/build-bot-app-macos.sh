@@ -90,8 +90,9 @@ build({
   resolveExtensions: ['.ts', '.tsx', '.mjs', '.js', '.cjs', '.json'],
   alias: { 'react-devtools-core': './_shims/react-devtools-core.mjs' },
   external: [
-    'playwright', 'playwright-core', 'playwright-extra', 'rebrowser-playwright',
-    'puppeteer-extra-plugin-stealth', 'better-sqlite3',
+    'playwright', 'playwright-core',
+    'patchright', 'patchright-core',
+    'better-sqlite3',
   ],
   banner: { js: \"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" },
   logLevel: 'info',
