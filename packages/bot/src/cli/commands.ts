@@ -1,19 +1,13 @@
 import { Command } from 'commander'
 import type { CheckoutResult } from '../tui/SummaryScreen.tsx'
 
-// Resolve the bot package version. In a SEA / CJS bundle `import.meta.url`
-// is not available, so we detect the runtime and fall back accordingly.
-const pkg = (() => {
-	try {
-		// CJS / SEA path — `require` is the global runtime require.
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		return (globalThis as { require?: (id: string) => unknown }).require?.(
-			'../../package.json',
-		) as { version: string } | undefined
-	} catch {
-		return undefined
-	}
-})() ?? { version: '0.1.0' }
+// Version is injected at build time via esbuild `define` (__BOT_VERSION__).
+// Touching `globalThis.require` in a Node SEA throws synchronously
+// (createRequire(__filename=undefined)), so we never look it up at runtime.
+declare const __BOT_VERSION__: string | undefined
+const pkg: { version: string } = {
+	version: typeof __BOT_VERSION__ === 'string' ? __BOT_VERSION__ : '0.1.0',
+}
 
 export const program = new Command()
 
@@ -676,8 +670,21 @@ program
 	.command('init')
 	.description('Interactive setup wizard — configure accounts, cards, addresses, capture sessions, dry-run')
 	.action(async () => {
-		const { runInitWizard } = await import('./wizard/initWizard.tsx')
-		runInitWizard()
+		try {
+			const { runInitWizard } = await import('./wizard/initWizard.tsx')
+			runInitWizard()
+		} catch (err) {
+			const msg = (err as Error).message ?? ''
+			if (/No such built-in module: ink|Cannot find (module|package) 'ink/.test(msg)) {
+				console.error(
+					'The `init` wizard requires the `ink` TUI runtime, which is not bundled into the standalone binary.',
+				)
+				console.error('Run it from a Node.js install instead:')
+				console.error('  npx --package=@nike-release-checker/bot nike-bot init')
+				process.exit(2)
+			}
+			throw err
+		}
 	})
 
 program

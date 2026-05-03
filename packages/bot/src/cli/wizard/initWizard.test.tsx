@@ -18,11 +18,11 @@ const ENTER = '\r'
 async function typeChars(stdin: { write: (d: string) => void }, chars: string) {
 	for (const ch of chars) {
 		stdin.write(ch)
-		await sleep(5)
+		await sleep(20)
 	}
 }
 
-async function settle(ms = 30) {
+async function settle(ms = 60) {
 	await sleep(ms)
 }
 
@@ -67,16 +67,27 @@ test('Step1: valid input calls onDone with parsed count', async () => {
 	ui.unmount()
 })
 
-test('Step2: non-existent path surfaces error and re-prompts', async () => {
-	let done = false
-	const ui = render(<Step2CsvPaths onDone={() => { done = true }} />)
-
-	await typeChars(ui.stdin,'/definitely/does/not/exist.csv')
-	ui.stdin.write(ENTER)
-	await settle(80)
-	assert.match(ui.lastFrame() ?? '', /File not found/)
-	assert.equal(done, false)
-	ui.unmount()
+test('Step2: empty accounts.csv (just template) surfaces "no rows" error on Enter', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'wizard-step2-'))
+	try {
+		let done = false
+		const ui = render(
+			<Step2CsvPaths
+				onDone={() => { done = true }}
+				dataDir={dir}
+				autoOpenFolder={false}
+			/>,
+		)
+		// Wait for the auto-generation effect to land.
+		await settle(80)
+		ui.stdin.write(ENTER)
+		await settle(80)
+		assert.match(ui.lastFrame() ?? '', /no rows yet|no valid rows/)
+		assert.equal(done, false)
+		ui.unmount()
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
 })
 
 test('Step3: all accounts transition to ok when runCapture resolves success', async () => {

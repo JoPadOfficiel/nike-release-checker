@@ -1,51 +1,81 @@
-import { writeFile, chmod, access, mkdir } from 'node:fs/promises'
+import { writeFile, chmod, access, mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const ACCOUNTS_TEMPLATE = `# accounts.csv — one row per Nike account
-# Columns:
-#   account_id      unique id (alphanumeric/_/-), e.g. kev_001
-#   email           Nike login email
-#   password        Nike login password (stored locally only)
-#   proxy_url       optional — http://user:pass@host:port OR socks5://...
-#   country         ISO 2-letter code, default FR
-#   preferred_sizes ";"-separated list, e.g. 42;42.5;43
-account_id,email,password,proxy_url,country,preferred_sizes
-# kev_001,sample@mail.com,password1,http://u:p@proxy1.com:8080,FR,42;42.5;43
-# kev_002,sample2@mail.com,password2,,FR,41;42
-`
+const ACCOUNTS_TEMPLATE = 'account_id,email,password,proxy_url,country,preferred_sizes\n'
 
-const CARDS_TEMPLATE = `# cards.csv — one row per account (card data encrypted on import)
-# Columns:
-#   account_id     must match an entry in accounts.csv
-#   card_number    13-19 digits, no spaces
-#   expiry         MM/YY format, e.g. 12/27
-#   cvv            3-4 digits
-#   holder_name    as on card
-# WARNING: delete this file AFTER running "nike-bot cards import" — data is then in encrypted SQLite
-account_id,card_number,expiry,cvv,holder_name
-# kev_001,4111111111111111,12/27,123,Kevin Dupont
-`
+const CARDS_TEMPLATE = 'account_id,card_number,expiry,cvv,holder_name\n'
 
-const ADDRESSES_TEMPLATE = `# addresses.csv — shipping address per account
-# Columns:
-#   account_id   must match accounts.csv
-#   street       street + number
-#   city
-#   zip
-#   country      ISO 2-letter code
-#   phone        optional, international format e.g. +33600000000
-account_id,street,city,zip,country,phone
-# kev_001,"10 rue de la Paix",Paris,75002,FR,+33600000000
-`
+const ADDRESSES_TEMPLATE = 'account_id,firstName,lastName,email,street,city,zip,country,phone\n'
 
-const DROP_TEMPLATE = `# drop.csv — configure upcoming drops
-# Columns:
-#   sku              Nike SKU, e.g. AH7389-106
-#   sizes            ";"-separated list to target, e.g. 42;42.5;43
-#   accounts_filter  "all" or ";"-separated list of account_ids
-sku,sizes,accounts_filter
-# AH7389-106,"42;42.5;43",all
-# IQ7604-101,"40;41",kev_001;kev_002
+const DROP_TEMPLATE = 'sku,sizes,accounts_filter\n'
+
+const INSTRUCTIONS = `Nike Bot — how to fill the CSV files
+======================================
+
+Open each .csv with Numbers, Excel, LibreOffice Calc, or any text editor.
+Add ONE row per account / card / address / drop. Do NOT remove the first
+line (the header). Do NOT add any line starting with #.
+
+----------------------------------------------------------------------
+accounts.csv
+----------------------------------------------------------------------
+Columns:
+  account_id        unique short id you choose, e.g. kev_001
+                    (letters, digits, underscore, hyphen)
+  email             Nike login email
+  password          Nike login password (stored locally only)
+  proxy_url         optional. http://user:pass@host:port  or  socks5://host:port
+                    leave empty if you don't use a proxy
+  country           ISO 2-letter code, e.g. FR, US, DE, JP
+  preferred_sizes   sizes separated by ";"   e.g.   42;42.5;43
+
+Example row:
+  kev_001,kevin@example.com,MyP4ss!,http://user:pass@proxy1.com:8080,FR,42;42.5;43
+
+----------------------------------------------------------------------
+cards.csv
+----------------------------------------------------------------------
+Columns:
+  account_id    must match an account_id from accounts.csv
+  card_number   13-19 digits, NO spaces, NO dashes
+  expiry        MM/YY   e.g. 12/27
+  cvv           3 or 4 digits
+  holder_name   exactly as printed on the card
+
+Example row:
+  kev_001,4111111111111111,12/27,123,Kevin Dupont
+
+WARNING: delete this file AFTER the wizard has imported it. The data is
+encrypted into a local SQLite database during import.
+
+----------------------------------------------------------------------
+addresses.csv
+----------------------------------------------------------------------
+Columns:
+  account_id   must match accounts.csv
+  firstName    recipient first name
+  lastName     recipient last name
+  email        recipient email
+  street       street + number
+  city
+  zip
+  country      ISO 2-letter code
+  phone        optional, international format e.g. +33600000000
+
+Example row:
+  kev_001,Kevin,Dupont,kevin@example.com,10 rue de la Paix,Paris,75002,FR,+33600000000
+
+----------------------------------------------------------------------
+drop.csv
+----------------------------------------------------------------------
+Columns:
+  sku                Nike SKU, e.g. AH7389-106
+  sizes              ";"-separated sizes you want   e.g. 42;42.5;43
+  accounts_filter    "all"   OR   ";"-separated account_ids   e.g. kev_001;kev_002
+
+Example rows:
+  AH7389-106,42;42.5;43,all
+  IQ7604-101,40;41,kev_001;kev_002
 `
 
 export type TemplateKey = 'accounts' | 'cards' | 'addresses' | 'drop'
@@ -67,6 +97,15 @@ export async function generateTemplates(
 	for (const key of Object.keys(TEMPLATES) as TemplateKey[]) {
 		const file = join(folder, `${key}.csv`)
 		if (!opts.overwrite && (await fileExists(file))) {
+			// Auto-replace files that are still the legacy comment-laden template:
+			// if the first non-empty line starts with "#", the user has not begun
+			// to fill it, so we can safely refresh it.
+			if (await isLegacyCommentTemplate(file)) {
+				await writeFile(file, TEMPLATES[key], 'utf8')
+				if (key === 'accounts' || key === 'cards') await chmod(file, 0o600)
+				created.push(key)
+				continue
+			}
 			skipped.push(key)
 			continue
 		}
@@ -76,6 +115,12 @@ export async function generateTemplates(
 		}
 		created.push(key)
 	}
+
+	const helpFile = join(folder, '_HOW_TO_FILL.txt')
+	if (opts.overwrite || !(await fileExists(helpFile))) {
+		await writeFile(helpFile, INSTRUCTIONS, 'utf8')
+	}
+
 	return { created, skipped }
 }
 
@@ -83,6 +128,16 @@ async function fileExists(p: string): Promise<boolean> {
 	try {
 		await access(p)
 		return true
+	} catch {
+		return false
+	}
+}
+
+async function isLegacyCommentTemplate(file: string): Promise<boolean> {
+	try {
+		const text = await readFile(file, 'utf8')
+		const firstNonEmpty = text.split(/\r?\n/).find((l) => l.trim() !== '')
+		return firstNonEmpty !== undefined && firstNonEmpty.trimStart().startsWith('#')
 	} catch {
 		return false
 	}

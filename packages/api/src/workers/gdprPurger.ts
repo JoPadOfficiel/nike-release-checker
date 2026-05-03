@@ -45,6 +45,7 @@ export function startGdprPurger(): void {
   _intervalHandle = setInterval(() => {
     void gdprPurgerTick()
   }, 60 * 60 * 1_000)
+  _intervalHandle.unref?.()
 }
 
 /** Stop the GDPR hard-purge loop. */

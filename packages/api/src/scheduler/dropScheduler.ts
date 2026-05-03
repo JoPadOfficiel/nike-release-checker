@@ -179,6 +179,7 @@ export function createDropScheduler(deps: SchedulerDeps): DropScheduler {
       timer = setInterval(() => {
         void tick()
       }, intervalMs)
+      timer.unref?.()
     },
 
     async stop(): Promise<void> {

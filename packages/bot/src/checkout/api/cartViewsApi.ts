@@ -152,10 +152,11 @@ export class NikeCartViewsApi {
 		const start = Date.now()
 		let last: CartView | undefined
 
-		while (Date.now() - start < timeoutMs) {
+		while (true) {
 			last = await this.get(viewId)
 			if (last.status === 'READY') return last
 			if (last.status === 'ERROR') throw new CartViewError(last)
+			if (Date.now() - start >= timeoutMs) break
 			await new Promise<void>((r) => setTimeout(r, intervalMs))
 		}
 

@@ -106,28 +106,34 @@ describe('Rate limit — solo tier (60 req/min)', () => {
 describe('Rate limit — pro tier (600 req/min)', () => {
 	it('600th request succeeds, 601st returns 429', async () => {
 		seedAll()
+		const originalDateNow = Date.now
+		const fixedNow = originalDateNow()
 		const app = await buildApp()
 		app.get('/v1/ping', async () => ({ ok: true }))
 		await app.ready()
 
-		for (let i = 0; i < 600; i++) {
-			const res = await app.inject({
+		Date.now = () => fixedNow
+		try {
+			for (let i = 0; i < 600; i++) {
+				const res = await app.inject({
+					method: 'GET',
+					url: '/v1/ping',
+					headers: { authorization: `Bearer ${TOKEN_PRO}` },
+				})
+				assert.equal(res.statusCode, 200, `request ${i + 1} should succeed`)
+			}
+
+			const res601 = await app.inject({
 				method: 'GET',
 				url: '/v1/ping',
 				headers: { authorization: `Bearer ${TOKEN_PRO}` },
 			})
-			assert.equal(res.statusCode, 200, `request ${i + 1} should succeed`)
+			assert.equal(res601.statusCode, 429)
+			assert.equal(res601.headers['x-ratelimit-limit'], '600')
+		} finally {
+			Date.now = originalDateNow
+			await app.close()
 		}
-
-		const res601 = await app.inject({
-			method: 'GET',
-			url: '/v1/ping',
-			headers: { authorization: `Bearer ${TOKEN_PRO}` },
-		})
-		assert.equal(res601.statusCode, 429)
-		assert.equal(res601.headers['x-ratelimit-limit'], '600')
-
-		await app.close()
 	})
 })
 

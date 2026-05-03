@@ -189,13 +189,11 @@ describe('GET /v1/account/usage', () => {
 
 	it('orders with status=refunded or cancelled are excluded', async () => {
 		const now = new Date()
-		const year = now.getUTCFullYear()
-		const month = String(now.getUTCMonth() + 1).padStart(2, '0')
 
 		usageDb._seedOrder({
 			id: 'ord-ref',
 			customer_id: CUSTOMER_A_ID,
-			created_at: new Date(`${year}-${month}-04T10:00:00.000Z`),
+			created_at: new Date(now.getTime() - 180_000),
 			total_amount_cents: 999,
 			currency: 'USD',
 			status: 'refunded',
@@ -203,7 +201,7 @@ describe('GET /v1/account/usage', () => {
 		usageDb._seedOrder({
 			id: 'ord-can',
 			customer_id: CUSTOMER_A_ID,
-			created_at: new Date(`${year}-${month}-04T11:00:00.000Z`),
+			created_at: new Date(now.getTime() - 120_000),
 			total_amount_cents: 888,
 			currency: 'USD',
 			status: 'cancelled',
@@ -211,7 +209,7 @@ describe('GET /v1/account/usage', () => {
 		usageDb._seedOrder({
 			id: 'ord-ok',
 			customer_id: CUSTOMER_A_ID,
-			created_at: new Date(`${year}-${month}-04T12:00:00.000Z`),
+			created_at: new Date(now.getTime() - 60_000),
 			total_amount_cents: 500,
 			currency: 'USD',
 			status: 'confirmed',

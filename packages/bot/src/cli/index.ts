@@ -14,12 +14,23 @@ function shouldSkipChromiumCheck(argv: readonly string[]): boolean {
 }
 
 async function main(): Promise<void> {
+	// No args → run the interactive wizard. End-users double-click the .app and
+	// land directly in `init` instead of staring at help text.
+	if (process.argv.length <= 2) {
+		process.argv.push('init')
+	}
+
 	if (!shouldSkipChromiumCheck(process.argv)) {
 		try {
-			const { ensureChromium } = await import('./firstRun.tsx')
-			await ensureChromium()
+			// Probe without importing the ink-based UI; firstRun.tsx pulls in
+			// `ink`, which is external in the SEA bundle and would throw
+			// "No such built-in module: ink" on every command otherwise.
+			const { isChromiumInstalled } = await import('../installer/chromiumInstaller.ts')
+			if (!isChromiumInstalled()) {
+				const { ensureChromium } = await import('./firstRun.tsx')
+				await ensureChromium()
+			}
 		} catch (err) {
-			// If install fails, surface the error but don't block commands that may not need browsers
 			console.error('Chromium not available:', (err as Error).message)
 		}
 	}

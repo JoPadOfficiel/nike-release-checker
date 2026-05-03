@@ -30,7 +30,7 @@ test('fresh folder — all 4 templates created with header line', async () => {
 		assert.match(cards, /^account_id,card_number,expiry,cvv,holder_name$/m)
 
 		const addresses = await readFile(join(dir, 'addresses.csv'), 'utf8')
-		assert.match(addresses, /^account_id,street,city,zip,country,phone$/m)
+		assert.match(addresses, /^account_id,firstName,lastName,email,street,city,zip,country,phone$/m)
 
 		const drop = await readFile(join(dir, 'drop.csv'), 'utf8')
 		assert.match(drop, /^sku,sizes,accounts_filter$/m)

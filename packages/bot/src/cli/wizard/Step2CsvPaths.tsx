@@ -1,10 +1,9 @@
 /** @jsxImportSource react */
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
-import TextInput from 'ink-text-input'
-import { access } from 'node:fs/promises'
-import { resolve } from 'node:path'
-import { openFilePicker } from './filePicker.ts'
+import { spawn } from 'node:child_process'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { generateTemplates } from './csvTemplates.ts'
 import { parseAccountsCsv } from '../../config/accountsCsv.ts'
 
@@ -15,147 +14,124 @@ export interface CsvPaths {
 	drop: string
 }
 
-type Slot = keyof CsvPaths
-
-const SLOT_ORDER: Slot[] = ['accounts', 'cards', 'addresses', 'drop']
-
-const SLOT_LABELS: Record<Slot, string> = {
-	accounts: 'accounts.csv',
-	cards: 'cards.csv',
-	addresses: 'addresses.csv',
-	drop: 'drop.csv',
-}
-
 export interface Step2Props {
 	onDone: (paths: CsvPaths) => void
+	/** Override the default `~/Downloads/nikebot` location (used by tests). */
+	dataDir?: string
+	/** Disable opening the OS file manager (used by tests). */
+	autoOpenFolder?: boolean
 }
 
-async function pathExists(p: string): Promise<boolean> {
+function defaultDataDir(): string {
+	// User Downloads folder is standard on macOS / Linux / Windows and is the
+	// easiest place for non-technical users to find the CSV files.
+	return join(homedir(), 'Downloads', 'nikebot')
+}
+
+function openInFileManager(folder: string): void {
+	const platform = process.platform
+	const cmd =
+		platform === 'darwin' ? 'open'
+		: platform === 'win32' ? 'explorer'
+		: 'xdg-open'
 	try {
-		await access(p)
-		return true
+		spawn(cmd, [folder], { stdio: 'ignore', detached: true }).unref()
 	} catch {
-		return false
+		/* ignore — opening the folder is a convenience, not critical */
 	}
 }
 
-export function Step2CsvPaths({ onDone }: Step2Props) {
-	const [slotIdx, setSlotIdx] = useState(0)
-	const [value, setValue] = useState('')
-	const [paths, setPaths] = useState<Partial<CsvPaths>>({})
+type Status = 'init' | 'ready' | 'validating' | 'error'
+
+export function Step2CsvPaths({ onDone, dataDir, autoOpenFolder = true }: Step2Props) {
+	const folder = dataDir ?? defaultDataDir()
+	const paths: CsvPaths = {
+		accounts: join(folder, 'accounts.csv'),
+		cards: join(folder, 'cards.csv'),
+		addresses: join(folder, 'addresses.csv'),
+		drop: join(folder, 'drop.csv'),
+	}
+
+	const [status, setStatus] = useState<Status>('init')
+	const [info, setInfo] = useState<string>('')
 	const [error, setError] = useState<string | undefined>(undefined)
-	const [info, setInfo] = useState<string | undefined>(undefined)
-	const [busy, setBusy] = useState(false)
 
-	const currentSlot = SLOT_ORDER[slotIdx]
-
-	useInput((input) => {
-		if (busy) return
-		if (input === 'p') {
-			void (async () => {
-				setBusy(true)
-				const picked = await openFilePicker()
-				if (picked) setValue(picked)
-				setBusy(false)
-			})()
-		} else if (input === 'g') {
-			void (async () => {
-				setBusy(true)
-				try {
-					const { created, skipped } = await generateTemplates(process.cwd())
-					setInfo(`Templates created: ${created.join(', ') || 'none'}. Skipped: ${skipped.join(', ') || 'none'}.`)
-				} catch (err) {
-					setError(`Template generation failed: ${String(err)}`)
-				} finally {
-					setBusy(false)
-				}
-			})()
-		}
-	})
-
-	const handleSubmit = async (raw: string) => {
-		if (!currentSlot) return
-		const trimmed = raw.trim()
-		if (!trimmed) {
-			setError('Path is required')
-			return
-		}
-		const abs = resolve(trimmed)
-		const exists = await pathExists(abs)
-		if (!exists) {
-			setError(`File not found: ${abs}`)
-			return
-		}
-
-		// Validate accounts.csv now so we can surface structured errors immediately.
-		if (currentSlot === 'accounts') {
+	useEffect(() => {
+		void (async () => {
 			try {
-				const { accounts, errors } = await parseAccountsCsv(abs)
+				const { created, skipped } = await generateTemplates(folder)
+				const parts: string[] = []
+				if (created.length > 0) parts.push(`Created: ${created.join(', ')}`)
+				if (skipped.length > 0) parts.push(`Already present: ${skipped.join(', ')}`)
+				setInfo(parts.join(' — ') || 'Templates ready')
+				if (autoOpenFolder) openInFileManager(folder)
+				setStatus('ready')
+			} catch (err) {
+				setError(`Failed to create templates: ${(err as Error).message}`)
+				setStatus('error')
+			}
+		})()
+	}, [folder])
+
+	useInput((_input, key) => {
+		if (status !== 'ready' && status !== 'error') return
+		if (!key.return) return
+
+		setStatus('validating')
+		setError(undefined)
+		void (async () => {
+			try {
+				const { accounts, errors } = await parseAccountsCsv(paths.accounts)
 				if (errors.length > 0) {
 					const preview = errors
 						.slice(0, 3)
 						.map((e) => `row ${e.row} ${e.column}: ${e.message}`)
 						.join('; ')
 					setError(`accounts.csv has ${errors.length} error(s): ${preview}`)
+					setStatus('error')
 					return
 				}
 				if (accounts.length === 0) {
-					setError('accounts.csv contains no valid rows')
+					setError(
+						'accounts.csv has no rows yet. Open the file in the Downloads/nikebot folder, ' +
+							'fill in at least one account, save, then press Enter again.',
+					)
+					setStatus('error')
 					return
 				}
+				onDone(paths)
 			} catch (err) {
-				setError(`Failed to parse accounts.csv: ${String(err)}`)
-				return
+				setError(`Failed to read accounts.csv: ${(err as Error).message}`)
+				setStatus('error')
 			}
-		}
-
-		const nextPaths = { ...paths, [currentSlot]: abs }
-		setPaths(nextPaths)
-		setError(undefined)
-		setInfo(undefined)
-		setValue('')
-
-		const nextIdx = slotIdx + 1
-		if (nextIdx >= SLOT_ORDER.length) {
-			onDone(nextPaths as CsvPaths)
-			return
-		}
-		setSlotIdx(nextIdx)
-	}
-
-	useEffect(() => {
-		// Keep prompt clean whenever the slot advances.
-		setValue('')
-	}, [slotIdx])
+		})()
+	})
 
 	return (
-		<Box flexDirection='column'>
-			<Text>Step 2 of 5 — CSV file paths</Text>
-			<Text color='gray'>Press 'p' to pick a file (macOS), 'g' to auto-generate templates in cwd.</Text>
-			{SLOT_ORDER.map((slot, i) => {
-				if (i < slotIdx) {
-					return (
-						<Text key={slot} color='green'>
-							  {SLOT_LABELS[slot]}: {paths[slot]}
-						</Text>
-					)
-				}
-				if (i === slotIdx) {
-					return (
-						<Box key={slot}>
-							<Text color='cyan'>{SLOT_LABELS[slot]}: </Text>
-							<TextInput value={value} onChange={setValue} onSubmit={(v) => void handleSubmit(v)} />
-						</Box>
-					)
-				}
-				return (
-					<Text key={slot} color='gray'>
-					  {SLOT_LABELS[slot]}: (pending)
-					</Text>
-				)
-			})}
-			{info ? <Text color='yellow'>{info}</Text> : null}
-			{error ? <Text color='red'>{error}</Text> : null}
+		<Box flexDirection="column">
+			<Text>Step 2 of 5 — Configuration files (CSV)</Text>
+			<Box marginTop={1}>
+				<Text>Folder: <Text color="cyan">{folder}</Text></Text>
+			</Box>
+			<Text color="gray">  This folder has been opened in your file manager.</Text>
+			<Box marginTop={1} flexDirection="column">
+				<Text>Files:</Text>
+				<Text color="green">  • accounts.csv  — Nike accounts (login + proxy + country)</Text>
+				<Text color="green">  • cards.csv     — payment cards (encrypted on import)</Text>
+				<Text color="green">  • addresses.csv — shipping address per account</Text>
+				<Text color="green">  • drop.csv      — drops to monitor (SKU + sizes)</Text>
+				<Text color="gray">  • _HOW_TO_FILL.txt — explanation of every column</Text>
+			</Box>
+			<Box marginTop={1} flexDirection="column">
+				{status === 'init' ? <Text color="yellow">Creating templates…</Text> : null}
+				{info ? <Text color="gray">{info}</Text> : null}
+				{status === 'ready' ? (
+					<Text color="cyan">When you have filled in accounts.csv (at minimum), press Enter to continue.</Text>
+				) : null}
+				{status === 'validating' ? <Text color="yellow">Validating…</Text> : null}
+				{status === 'error' && error ? <Text color="red">{error}</Text> : null}
+				{status === 'error' ? <Text color="cyan">Edit the files, save, then press Enter to retry.</Text> : null}
+			</Box>
 		</Box>
 	)
 }
