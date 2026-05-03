@@ -4,7 +4,15 @@ import type { LoginFailureReason, LoginResult } from './auth.types.ts'
 import { dismissCookieConsent } from '../checkout/dismissCookies.ts'
 
 const LOGIN_URL = 'https://www.nike.com/fr/register'
+const WARMUP_URL = 'https://www.nike.com/fr'
 const STEP_TIMEOUT = 20_000
+// Kasada plants its kpf/kpss cookies and bootstraps its sensor (ips.js) on the
+// first page hit. If we go straight to /register or accounts.nike.com without
+// that warm-up, the first protected XHR ships an unsigned request, the response
+// comes back as an encrypted blob the React client can't parse, and the user
+// sees "Erreur lors de l'analyse de la réponse du serveur" right after the
+// email step. 2.5s is enough on a warm proxy; bump if you see flake.
+const WARMUP_SETTLE_MS = 2_500
 
 const BLOCKED_ERROR_PATTERNS = [
 	/erreur lors de l'analyse de la reponse du serveur/i,
@@ -43,10 +51,57 @@ export function classifyLoginFailure(errorText: string): LoginFailureReason {
 	return 'error'
 }
 
+async function warmupKasada(page: Page): Promise<void> {
+	// Best-effort warm-up — never fail the login because the warm-up navigation
+	// errored. If nike.com/fr is unreachable, the subsequent /register navigation
+	// will surface the real error.
+	try {
+		await page.goto(WARMUP_URL, { waitUntil: 'domcontentloaded', timeout: STEP_TIMEOUT })
+		await page.waitForTimeout(WARMUP_SETTLE_MS)
+	} catch {}
+}
+
 async function openLoginForm(page: Page, selectors: Selectors): Promise<void> {
+	await warmupKasada(page)
 	await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: STEP_TIMEOUT })
 	await dismissCookieConsent(page, selectors, 1500)
 	await page.waitForSelector(selectors.loginEmailInput, { timeout: STEP_TIMEOUT })
+}
+
+// Selector candidates for the "Utiliser le mot de passe" link/button shown on
+// accounts.nike.com/challenge-code after the email step. Nike defaults to
+// emailing an OTP; this link switches the flow back to the password field.
+// We try several since Nike's DOM is volatile.
+const USE_PASSWORD_SELECTORS = [
+	'button:has-text("Utiliser le mot de passe")',
+	'a:has-text("Utiliser le mot de passe")',
+	'[role="button"]:has-text("Utiliser le mot de passe")',
+	'button:has-text("Use password")',
+	'a:has-text("Use password")',
+	'button[data-testid*="password" i]:not([type="submit"])',
+] as const
+
+/**
+ * After submitting the email Nike redirects to accounts.nike.com/challenge-code,
+ * which by default offers an emailed OTP. Click "Utiliser le mot de passe" to
+ * switch to the password field. Best-effort: if the link is absent (Nike
+ * routed straight to the password step), we just return.
+ */
+async function clickUsePasswordIfPresent(page: Page): Promise<boolean> {
+	for (const sel of USE_PASSWORD_SELECTORS) {
+		try {
+			const loc = page.locator(sel).first()
+			if (await loc.isVisible({ timeout: 1500 }).catch(() => false)) {
+				await loc.click({ timeout: 3000 })
+				// Give Nike a moment to swap challenge → password field.
+				await page.waitForTimeout(500)
+				return true
+			}
+		} catch {
+			// try next selector
+		}
+	}
+	return false
 }
 
 export async function performNikeLogin(
@@ -62,6 +117,13 @@ export async function performNikeLogin(
 		// Step 1: Enter email and click continue
 		await page.fill(selectors.loginEmailInput, email)
 		await page.click(selectors.loginContinueButton)
+
+		// Step 1b: Nike's OAuth challenge page defaults to emailing an OTP.
+		// Click "Utiliser le mot de passe" to switch back to the password field.
+		// No-op if Nike served the password step directly. Wait briefly first
+		// so the challenge page has time to render.
+		await page.waitForTimeout(800)
+		await clickUsePasswordIfPresent(page)
 
 		// Step 2: Enter password and submit
 		const passwordOutcome = await Promise.race([

@@ -2,7 +2,7 @@ import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:c
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { chromium } from 'playwright-extra'
+import { chromium } from 'playwright'
 
 export interface ProgressEvent {
 	phase: 'download' | 'extract' | 'verify'

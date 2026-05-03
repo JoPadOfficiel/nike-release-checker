@@ -5,7 +5,7 @@ import { loadAccountsFile } from '../config/accountConfig.ts'
 import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail, maskProxy, maskCredentials } from '../logger/credentialMasker.ts'
 import { testProxyConnectivity } from './proxyTester.ts'
-import { createStealthContext } from '../stealth/contextFactory.ts'
+import { launchRealChrome } from '../stealth/realChrome.ts'
 import { performNikeLogin } from './loginFlow.ts'
 import { captureCookies, persistCookies } from './cookieStore.ts'
 import { validateSession } from './sessionValidator.ts'
@@ -130,17 +130,30 @@ export async function loadStoredAccounts(): Promise<(AccountConfig & { importedA
 }
 
 // Shared per-account login logic — used by both authenticateAll() and authenticateSingle()
+//
+// Uses launchRealChrome (spawn + connectOverCDP) instead of chromium.launch(). Kasada
+// detects Playwright's launch-time CDP injection and freezes the login flow with the
+// "Erreur lors de l'analyse de la réponse du serveur" message after the email step;
+// attaching to a Chrome we spawn ourselves bypasses that signal entirely.
+//
+// Each account gets a per-account persistent profile under ~/.nike-bot/profiles/{id},
+// and we randomize the debug port per call so multiple authenticateAccount() can run
+// in parallel without colliding on port 9222.
 async function authenticateAccount(
 	account: AccountConfig & { importedAt: string },
 	selectors: Selectors,
 ): Promise<AuthResult> {
 	const startMs = Date.now()
-	const context = await createStealthContext({ proxy: account.proxy, headless: false })
+	const port = 9300 + Math.floor(Math.random() * 100)
+	const handle = await launchRealChrome({ accountId: account.id, headless: false, port })
 	try {
-		const page = await context.newPage()
+		// Always open a fresh tab — the initial about:blank page Chrome creates can
+		// be torn down right after connectOverCDP attaches (especially in headless=new),
+		// causing "Target page, context or browser has been closed" on the first goto.
+		const page = await handle.context.newPage()
 		const loginResult = await performNikeLogin(page, account.email, account.password, selectors)
 		if (loginResult.success) {
-			const cookies = await captureCookies(context)
+			const cookies = await captureCookies(handle.context)
 			await persistCookies(account.id, cookies)
 			return { accountId: account.id, success: true, durationMs: Date.now() - startMs }
 		}
@@ -162,7 +175,7 @@ async function authenticateAccount(
 		}
 	} finally {
 		// Suppress close errors so they don't replace the original error already in results
-		await context.close().catch(() => undefined)
+		await handle.close().catch(() => undefined)
 	}
 }
 

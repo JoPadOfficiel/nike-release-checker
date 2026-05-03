@@ -58,6 +58,9 @@ function makeMockPage(scenario: 'success' | 'error' | 'email-blocked' | 'timeout
 		click: async (_sel: string) => {
 			calls.push('click')
 		},
+		waitForTimeout: async (_ms: number) => {
+			calls.push('waitForTimeout')
+		},
 		textContent: async (_sel: string): Promise<string | null> => {
 			if (scenario === 'email-blocked') return "Icône d'alerteErreur lors de l'analyse de la réponse du serveur"
 			return scenario === 'error' ? 'Invalid credentials. Please try again.' : null
