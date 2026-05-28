@@ -20,7 +20,7 @@
  * chrome.runtime/loadTimes/csi, WebGL Apple-M2 spoof, etc.).
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'patchright'
@@ -34,14 +34,64 @@ const CHROME_PATHS: string[] = [
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',  // Windows
 ]
 
+/**
+ * Locate the Chrome/Chromium binary to spawn. Resolution order:
+ *   1. NIKE_BOT_CHROME_PATH override (explicit operator choice).
+ *   2. System Google Chrome — PREFERRED: real Chrome sends the "Google Chrome"
+ *      sec-ch-ua brand Kasada expects, giving the best bypass odds.
+ *   3. The Chromium bundled in the .app/.exe (resolved from PLAYWRIGHT_BROWSERS_PATH)
+ *      so the packaged build still runs on a machine WITHOUT Google Chrome.
+ */
 function findChromeBinary(): string {
-  // Allow override via env (used by the bundled DMG to point at an embedded Chromium).
   const override = process.env.NIKE_BOT_CHROME_PATH
   if (override && existsSync(override)) return override
   for (const p of CHROME_PATHS) {
     if (existsSync(p)) return p
   }
-  throw new Error('Google Chrome not found. Install it from https://www.google.com/chrome/')
+  // Fallback: the bundled Playwright/patchright Chromium shipped inside the
+  // packaged app (PLAYWRIGHT_BROWSERS_PATH is set by the launcher to .../browsers).
+  const bundled = findBundledChromium()
+  if (bundled) {
+    console.warn('  [chrome] System Google Chrome not found — using the bundled Chromium (slightly higher bot-detection risk than real Chrome)')
+    return bundled
+  }
+  throw new Error('Google Chrome not found. Install it from https://www.google.com/chrome/ (or ship a bundled Chromium under PLAYWRIGHT_BROWSERS_PATH).')
+}
+
+/**
+ * Resolve the chromium executable inside PLAYWRIGHT_BROWSERS_PATH (the directory
+ * the packaged app sets up at build time). Scans the platform-specific
+ * chromium build directory. Returns undefined if none is present.
+ */
+function findBundledChromium(): string | undefined {
+  const base = process.env.PLAYWRIGHT_BROWSERS_PATH
+  if (!base || !existsSync(base)) return undefined
+  try {
+    const candidates: string[] = []
+    for (const entry of readdirSync(base)) {
+      // Match the chromium build dir but NOT the headless-shell variant.
+      if (!/^chromium-/.test(entry) || /headless/.test(entry)) continue
+      const dir = join(base, entry)
+      // The platform subdir is named chrome-mac-arm64 / chrome-mac-x64 /
+      // chrome-linux / chrome-win64 / chrome-win — enumerate whatever is there.
+      let platformDirs: string[] = []
+      try {
+        platformDirs = readdirSync(dir).filter((d) => /^chrome-(mac|linux|win)/.test(d))
+      } catch { /* dir not readable */ }
+      for (const pd of platformDirs) {
+        const p = join(dir, pd)
+        // macOS app bundles
+        candidates.push(join(p, 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'))
+        candidates.push(join(p, 'Chromium.app', 'Contents', 'MacOS', 'Chromium'))
+        // Linux / Windows flat binaries
+        candidates.push(join(p, 'chrome'))
+        candidates.push(join(p, 'chrome.exe'))
+      }
+    }
+    return candidates.find((p) => existsSync(p))
+  } catch {
+    return undefined
+  }
 }
 
 export interface RealChromeHandle {
