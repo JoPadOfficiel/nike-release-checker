@@ -65,6 +65,9 @@ export function Wizard() {
 	)
 }
 
-export function runInitWizard() {
-	return render(<Wizard />)
+export async function runInitWizard(): Promise<void> {
+	const app = render(<Wizard />)
+	// Await the wizard's exit so callers (e.g. the home-menu loop) resume only
+	// after setup completes, not the instant the component mounts.
+	await app.waitUntilExit()
 }

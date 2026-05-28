@@ -136,9 +136,9 @@ async function resolveHomeAction(): Promise<string[]> {
 				// catches the exact drop second and cops automatically.
 				return ['run', '--wait-live', '3600']
 			case 'run:dry':
-				// Same arming behaviour but WITHOUT ordering, so you can leave it
-				// running and watch it auto-checkout (dry) the moment the pair drops.
-				return ['run', '--dry-run', '--wait-live', '3600']
+				// Single pass over EVERY drop, no auto-refresh — a quick test that
+				// each pair resolves and the flow runs, without spinning the machine.
+				return ['run', '--dry-run']
 			case 'capture': {
 				const id = await firstAccountId()
 				if (!id) {
@@ -155,51 +155,67 @@ async function resolveHomeAction(): Promise<string[]> {
 	}
 }
 
+async function ensureChromiumReady(argv: readonly string[]): Promise<void> {
+	if (shouldSkipChromiumCheck(argv)) return
+	try {
+		// Probe without importing the ink-based UI; firstRun.tsx pulls in
+		// `ink`, which is external in the SEA bundle and would throw
+		// "No such built-in module: ink" on every command otherwise.
+		const { isChromiumInstalled } = await import('../installer/chromiumInstaller.ts')
+		if (!isChromiumInstalled()) {
+			const { ensureChromium } = await import('./firstRun.tsx')
+			await ensureChromium()
+		}
+	} catch (err) {
+		console.error('Chromium not available:', (err as Error).message)
+	}
+}
+
 async function main(): Promise<void> {
-	// No args → decide between the home menu (already configured) and the
-	// first-run setup wizard. End-users double-click the .app; they should land
-	// on something they can OPERATE, not a wizard that completes and exits.
-	if (process.argv.length <= 2) {
-		if (await isConfigured()) {
-			// The home menu needs a real terminal (raw-mode keyboard input). When
-			// launched without a TTY (piped/CI), don't hang on an unusable menu —
-			// print the available commands and exit.
-			if (!process.stdin.isTTY) {
-				console.log('Nike Bot — déjà configuré. Commandes disponibles :')
-				console.log('  nike-bot run            # lancer les drops (drop.csv)')
-				console.log('  nike-bot run --dry-run  # tester sans commander')
-				console.log('  nike-bot status         # état comptes & sessions')
-				console.log('  nike-bot capture-session --account <id>  # capturer/rafraîchir une session')
-				console.log('  nike-bot init           # reconfigurer')
-				return
-			}
-			const action = await resolveHomeAction()
-			if (action.length === 0) {
-				// User chose Quitter → exit cleanly.
-				return
-			}
-			process.argv.push(...action)
-		} else {
-			process.argv.push('init')
-		}
+	// Explicit command on the CLI → run it once and exit (scripting / power users).
+	if (process.argv.length > 2) {
+		await ensureChromiumReady(process.argv)
+		await program.parseAsync(process.argv)
+		return
 	}
 
-	if (!shouldSkipChromiumCheck(process.argv)) {
+	// No args. Fresh install → setup wizard. Otherwise → the HOME MENU LOOP.
+	if (!(await isConfigured())) {
+		await ensureChromiumReady(['node', 'nike-bot', 'init'])
+		await program.parseAsync(['node', 'nike-bot', 'init'])
+		return
+	}
+
+	// The home menu needs a real terminal (raw-mode keyboard input). When
+	// launched without a TTY (piped/CI), print the commands and exit.
+	if (!process.stdin.isTTY) {
+		console.log('Nike Bot — déjà configuré. Commandes disponibles :')
+		console.log('  nike-bot run            # lancer les drops (drop.csv)')
+		console.log('  nike-bot run --dry-run  # tester sans commander')
+		console.log('  nike-bot status         # état comptes & sessions')
+		console.log('  nike-bot capture-session --account <id>  # capturer/rafraîchir une session')
+		console.log('  nike-bot init           # reconfigurer')
+		return
+	}
+
+	// HOME LOOP: after any action completes, come BACK to the menu instead of
+	// quitting. Operate-actions (run / capture / init) dispatch their command and
+	// return here when done; read-only actions (status / folder) are handled
+	// inline inside resolveHomeAction. Only "Quitter" leaves the app.
+	for (;;) {
+		const action = await resolveHomeAction()
+		if (action.length === 0) return // Quitter
+		const argv = ['node', 'nike-bot', ...action]
+		await ensureChromiumReady(argv)
 		try {
-			// Probe without importing the ink-based UI; firstRun.tsx pulls in
-			// `ink`, which is external in the SEA bundle and would throw
-			// "No such built-in module: ink" on every command otherwise.
-			const { isChromiumInstalled } = await import('../installer/chromiumInstaller.ts')
-			if (!isChromiumInstalled()) {
-				const { ensureChromium } = await import('./firstRun.tsx')
-				await ensureChromium()
-			}
+			await program.parseAsync(argv)
 		} catch (err) {
-			console.error('Chromium not available:', (err as Error).message)
+			console.error(`\n❌ ${(err as Error).message}`)
 		}
+		// brief pause so the user sees the command's final output before the menu
+		// repaints over it.
+		await new Promise((r) => setTimeout(r, 400))
 	}
-
-	await program.parseAsync(process.argv)
 }
 
 main().catch((err: unknown) => {

@@ -55,6 +55,9 @@ export async function selectSize(
         '[data-testid="pdp-grid-selector-item"]',
         '[data-testid="size-selector"] input[type="radio"]',
         '[data-testid="grid-selector-input"]',
+        // SNKRS launch pages (/fr/launch/t/) render sizes as buttons named
+        // size_item_radio_<uuid> with text "EU 42" — no data-testid, no grid item.
+        'button[name^="size_item_radio_"]',
       ].filter(Boolean).join(', ')
       const notAvailableSelector = [
         selectors.productPage.soldOutIndicator,
@@ -139,6 +142,22 @@ export async function selectSize(
           return `size:${size}`
         }
         // If neither strategy selected, try the next target size.
+      }
+
+      // SNKRS launch layout: sizes are <button name="size_item_radio_<uuid>">
+      // with text "EU 42" (no pdp-grid-selector-item). Click the matching button.
+      for (const size of targetSizes) {
+        const escaped = size.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const re = new RegExp(`^\\s*EU\\s+${escaped}\\s*$`)
+        const btn = page.locator('button[name^="size_item_radio_"]').filter({ hasText: re }).first()
+        if ((await btn.count()) === 0) continue
+        if (!(await btn.isEnabled().catch(() => false))) continue // greyed-out = that size sold out
+        await naturalClick(page, btn).catch(() => {})
+        await page.waitForTimeout(300)
+        // Selection confirmed if the button is now pressed/checked, or an
+        // add-to-cart/buy CTA became enabled. Best-effort: assume success on click.
+        selectedSize = size
+        return `size:${size}`
       }
 
       throw Object.assign(

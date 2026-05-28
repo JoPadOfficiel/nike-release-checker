@@ -724,7 +724,7 @@ program
 	.action(async () => {
 		try {
 			const { runInitWizard } = await import('./wizard/initWizard.tsx')
-			runInitWizard()
+			await runInitWizard()
 		} catch (err) {
 			const msg = (err as Error).message ?? ''
 			if (/No such built-in module: ink|Cannot find (module|package) 'ink/.test(msg)) {
