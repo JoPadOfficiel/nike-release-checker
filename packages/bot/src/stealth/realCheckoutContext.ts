@@ -7,6 +7,7 @@ export interface RealCheckoutContextOptions {
   port?: number  // Default: random in 9300-9400 range for parallel runs
   locale?: string
   timezone?: string
+  proxy?: string  // Per-account proxy URL (http://user:pass@host:port) — exit IP for this account
 }
 
 /**
@@ -39,6 +40,7 @@ export async function createRealCheckoutContext(
     port = 9300 + Math.floor(Math.random() * 100),
     locale,
     timezone,
+    proxy,
   } = options
 
   const handle = await launchRealChrome({
@@ -47,6 +49,7 @@ export async function createRealCheckoutContext(
     port,
     ...(locale ? { locale } : {}),
     ...(timezone ? { timezone } : {}),
+    ...(proxy ? { proxy } : {}),
   })
 
   try {

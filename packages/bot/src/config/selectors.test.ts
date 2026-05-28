@@ -77,15 +77,14 @@ purchaseButton: '.buy'
 		)
 	})
 
-	it('throws with path and mentions selectors.example.yaml when file is not found', async () => {
+	it('falls back to the bundled selectors.example.yaml when the path is not found', async () => {
+		// Fresh-install behavior: a missing selectors path no longer throws — it
+		// loads the bundled example (which ships in the app / dev source tree) so
+		// dry-run/run work out of the box. Returns a fully-valid Selectors object.
 		const missingPath = '/nonexistent/selectors.yaml'
-		await assert.rejects(
-			() => loadSelectors(missingPath),
-			(err: Error) =>
-				err.message.includes('Selectors file not found') &&
-				err.message.includes(missingPath) &&
-				err.message.includes('selectors.example.yaml'),
-		)
+		const selectors = await loadSelectors(missingPath)
+		assert.ok(selectors.loginEmailInput && selectors.loginEmailInput.length > 0)
+		assert.ok(selectors.productPage && typeof selectors.productPage.sizeGrid === 'string')
 	})
 
 	it('loads successfully and ignores extra unknown keys', async () => {

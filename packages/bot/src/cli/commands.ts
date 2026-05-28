@@ -158,7 +158,15 @@ program
 		console.log('  4. Do NOT close the Chrome window until capture completes')
 		console.log('')
 
-		const { context, close } = await launchRealChrome({ headless: false, accountId: opts.account })
+		// Bind the capture to the SAME exit IP checkout will later use, so the
+		// session is consistent with the proxy. Look up the stored account's proxy.
+		let captureProxy: string | undefined
+		try {
+			const { loadStoredAccounts } = await import('../auth/accountManager.ts')
+			captureProxy = (await loadStoredAccounts()).find((a) => a.id === opts.account)?.proxy
+		} catch { /* no stored proxy — capture on host IP */ }
+
+		const { context, close } = await launchRealChrome({ headless: false, accountId: opts.account, ...(captureProxy ? { proxy: captureProxy } : {}) })
 
 		// Use the default page that Chrome opens on startup, or create one
 		const existingPages = context.pages()

@@ -9,7 +9,7 @@ import type { BrowserContext } from 'playwright'
 import { launchRealChrome, type RealChromeHandle } from './realChrome.ts'
 
 export interface StealthContextOptions {
-	proxy?: string  // Full URL: http://user:pass@host:port (currently unused, see note)
+	proxy?: string  // Full URL: http://user:pass@host:port — forwarded to launchRealChrome
 	headless?: boolean  // Default: true
 	locale?: string  // Default: 'fr-FR'
 	timezone?: string  // Default: 'Europe/Paris'
@@ -46,6 +46,7 @@ export async function createStealthContext(
 		...(options.locale !== undefined ? { locale: options.locale } : {}),
 		...(options.timezone !== undefined ? { timezone: options.timezone } : {}),
 		...(options.accountId !== undefined ? { accountId: options.accountId } : {}),
+		...(options.proxy ? { proxy: options.proxy } : {}),
 	})
 
 	const ctx = handle.context

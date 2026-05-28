@@ -106,6 +106,7 @@ export interface RealChromeOptions {
   locale?: string  // Default: 'fr-FR'
   timezone?: string  // Default: 'Europe/Paris'
   accountId?: string  // When set, uses a per-account profile under ~/.nike-bot/profiles/{accountId}
+  proxy?: string  // Full proxy URL: http://user:pass@host:port (or socks5://host:port). Per-account exit IP.
 }
 
 /**
@@ -370,6 +371,26 @@ export async function launchRealChrome(
   void options.timezone
   const port = options.port ?? 9222 + Math.floor(Math.random() * 100)
 
+  // Per-account proxy: parse the URL into a Chrome --proxy-server value (scheme
+  // + host:port, NO inline creds — Chrome rejects user:pass@ in --proxy-server).
+  // Auth (if any) is applied AFTER connectOverCDP via ctx.setHTTPCredentials,
+  // which patchright drives through Fetch.authRequired → continueWithAuth and
+  // works even on an externally-spawned, CDP-attached Chrome.
+  let proxyServer: string | undefined
+  let proxyUsername: string | undefined
+  let proxyPassword: string | undefined
+  if (options.proxy && options.proxy.trim() !== '') {
+    try {
+      const { parseProxyUrl } = await import('./proxyValidator.ts')
+      const parsed = parseProxyUrl(options.proxy)
+      proxyServer = parsed.server
+      proxyUsername = parsed.username
+      proxyPassword = parsed.password
+    } catch (err) {
+      console.error(`  [proxy] invalid proxy URL, launching WITHOUT proxy: ${(err as Error).message}`)
+    }
+  }
+
   mkdirSync(userDataDir, { recursive: true })
 
   // Clear stale Chrome singleton locks from a previous crashed run.
@@ -408,6 +429,11 @@ export async function launchRealChrome(
     '--password-store=basic',
     '--use-mock-keychain',
   ]
+  if (proxyServer) {
+    // host:port (scheme included) — credentials applied post-attach.
+    args.push(`--proxy-server=${proxyServer}`)
+    console.log(`  [proxy] routing through ${proxyServer}${proxyUsername ? ' (authenticated)' : ''}`)
+  }
   if (!headless) {
     args.push('--start-maximized', '--window-position=100,50')
   } else {
@@ -483,6 +509,19 @@ export async function launchRealChrome(
 
   const contexts = browser.contexts()
   const ctx = (contexts[0] ?? (await browser.newContext())) as unknown as BrowserContext
+
+  // Authenticated proxy: supply credentials post-attach. patchright handles the
+  // proxy 407 via Fetch.authRequired → continueWithAuth even though Chrome was
+  // spawned externally and attached over CDP.
+  if (proxyUsername) {
+    try {
+      await (ctx as unknown as {
+        setHTTPCredentials: (c: { username: string; password: string }) => Promise<void>
+      }).setHTTPCredentials({ username: proxyUsername, password: proxyPassword ?? '' })
+    } catch (err) {
+      console.error(`  [proxy] failed to set proxy credentials: ${(err as Error).message}`)
+    }
+  }
 
   await ctx.setExtraHTTPHeaders({
     'Accept-Language': `${locale},fr;q=0.9,en-US;q=0.8,en;q=0.7`,

@@ -89,6 +89,7 @@ export async function createCheckoutContext(
   const handle = await createRealCheckoutContext({
     accountId: account.id,
     headless: false, // Visible browser — Kasada blocks headless Chrome at accounts.nike.com
+    ...(account.proxy ? { proxy: account.proxy } : {}),
   })
   // Always open a fresh tab — the initial about:blank page of a CDP-attached
   // Chrome can be reaped, leaving a dead handle that fails the first goto with
@@ -109,6 +110,7 @@ async function safeCreateRealCheckoutContext(
   return createRealCheckoutContext({
     accountId: account.id,
     headless: false,
+    ...(account.proxy ? { proxy: account.proxy } : {}),
   })
 }
 

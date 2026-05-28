@@ -145,7 +145,7 @@ async function authenticateAccount(
 ): Promise<AuthResult> {
 	const startMs = Date.now()
 	const port = 9300 + Math.floor(Math.random() * 100)
-	const handle = await launchRealChrome({ accountId: account.id, headless: false, port })
+	const handle = await launchRealChrome({ accountId: account.id, headless: false, port, ...(account.proxy ? { proxy: account.proxy } : {}) })
 	try {
 		// Always open a fresh tab — the initial about:blank page Chrome creates can
 		// be torn down right after connectOverCDP attaches (especially in headless=new),

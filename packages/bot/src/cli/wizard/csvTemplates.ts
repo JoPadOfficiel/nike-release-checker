@@ -1,4 +1,7 @@
 import { writeFile, chmod, access, mkdir, readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 
 const ACCOUNTS_TEMPLATE = 'account_id,email,password,proxy_url,country,preferred_sizes\n'
@@ -121,7 +124,35 @@ export async function generateTemplates(
 		await writeFile(helpFile, INSTRUCTIONS, 'utf8')
 	}
 
+	// Seed an editable selectors.yaml from the bundled selectors.example.yaml so
+	// the runtime (run / dry-run) finds it in the data folder on a fresh install.
+	const selectorsFile = join(folder, 'selectors.yaml')
+	if (opts.overwrite || !(await fileExists(selectorsFile))) {
+		const example = bundledSelectorsExample()
+		if (example) {
+			try {
+				await writeFile(selectorsFile, await readFile(example, 'utf8'), 'utf8')
+			} catch { /* best-effort */ }
+		}
+	}
+
 	return { created, skipped }
+}
+
+/** Locate the bundled selectors.example.yaml (app dir or dev source tree). */
+function bundledSelectorsExample(): string | undefined {
+	const candidates: string[] = []
+	if (process.env.NIKE_BOT_APP_PATH) candidates.push(join(process.env.NIKE_BOT_APP_PATH, 'selectors.example.yaml'))
+	try {
+		const here = dirname(fileURLToPath(import.meta.url))
+		candidates.push(join(here, 'selectors.example.yaml')) // bundled (main.mjs sibling)
+		candidates.push(join(here, '..', '..', '..', 'selectors.example.yaml')) // dev: wizard → package root
+	} catch { /* ignore */ }
+	return candidates.find((p) => existsSyncSafe(p))
+}
+
+function existsSyncSafe(p: string): boolean {
+	try { return existsSync(p) } catch { return false }
 }
 
 async function fileExists(p: string): Promise<boolean> {
