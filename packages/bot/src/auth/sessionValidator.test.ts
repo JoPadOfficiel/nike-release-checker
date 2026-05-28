@@ -78,20 +78,29 @@ describe('validateSession', () => {
 		assert.ok(typeof result.expiredAt === 'number')
 	})
 
-	it('returns expired when _abck cookie has past expiration', async () => {
+	// Anti-bot cookies (_abck Akamai, KP_UIDz Kasada) are regenerated on every
+	// visit by a browser that presents a valid `sid`. Their expiry must NOT
+	// invalidate the session — only `sid` does. (Bug fix 2026-05-04.)
+	it('stays valid when _abck cookie has past expiration (anti-bot cookie, not auth)', async () => {
 		const cookies = allCritical()
 		cookies[1] = cookie({ name: '_abck', domain: '.nike.com', expires: now() - 3600 })
 		await write(cookies)
 		const result = await validateSession(ID, SESSIONS_DIR)
-		assert.equal(result.status, 'expired')
+		assert.equal(result.status, 'valid')
 	})
 
-	it('returns expired when KP_UIDz cookie has past expiration', async () => {
+	it('stays valid when KP_UIDz cookie has past expiration (anti-bot cookie, not auth)', async () => {
 		const cookies = allCritical()
 		cookies[2] = cookie({ name: 'KP_UIDz', domain: 'api.nike.com', expires: now() - 3600 })
 		await write(cookies)
 		const result = await validateSession(ID, SESSIONS_DIR)
-		assert.equal(result.status, 'expired')
+		assert.equal(result.status, 'valid')
+	})
+
+	it('stays valid when only sid is present (no _abck / KP_UIDz at all)', async () => {
+		await write([cookie({ name: 'sid', domain: '.accounts.nike.com', expires: now() + 3600 })])
+		const result = await validateSession(ID, SESSIONS_DIR)
+		assert.equal(result.status, 'valid')
 	})
 
 	it('returns valid when all critical cookies have future expiration', async () => {

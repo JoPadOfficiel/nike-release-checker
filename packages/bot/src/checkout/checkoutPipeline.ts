@@ -82,7 +82,10 @@ export async function createCheckoutContext(
     accountId: account.id,
     headless: false, // Visible browser — Kasada blocks headless Chrome at accounts.nike.com
   })
-  const page = handle.context.pages()[0] ?? (await handle.context.newPage())
+  // Always open a fresh tab — the initial about:blank page of a CDP-attached
+  // Chrome can be reaped, leaving a dead handle that fails the first goto with
+  // "Target page, context or browser has been closed".
+  const page = await handle.context.newPage()
   return {
     context: handle.context,
     page,
@@ -145,7 +148,8 @@ export async function runCheckoutPipeline(
   registerContext(context)
 
   try {
-    const page = handle.context.pages()[0] ?? (await handle.context.newPage())
+    // Always open a fresh tab — see createCheckoutContext for the rationale.
+    const page = await handle.context.newPage()
     const mode = resolvePipelineMode(config)
 
     if (mode === 'hybrid') {

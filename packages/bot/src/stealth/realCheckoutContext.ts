@@ -73,10 +73,13 @@ export async function createRealCheckoutContext(
     // goto + assertNotBlocked will catch any auth issues. This skips 3-5s of
     // navigation overhead per checkout.
     if (injectedSnapshot) {
-      const page = handle.context.pages()[0] ?? (await handle.context.newPage())
-      // Nike sets `sid` on accounts.nike.com (not www.nike.com), so query both origins
-      // to cover the full SPA + OAuth surface.
-      const allCookies = await page.context().cookies([
+      // Read cookies straight from the context — no page needed. Touching the
+      // initial about:blank page of a CDP-attached Chrome is unreliable (it can
+      // be reaped by Chrome, leaving a dead handle the checkout pipeline then
+      // trips over with "Target page, context or browser has been closed").
+      // Nike sets `sid` on accounts.nike.com (not www.nike.com), so query both
+      // origins to cover the full SPA + OAuth surface.
+      const allCookies = await handle.context.cookies([
         'https://www.nike.com',
         'https://accounts.nike.com',
         'https://api.nike.com',
