@@ -33,7 +33,7 @@ test('fresh folder — all 4 templates created with header line', async () => {
 		assert.match(addresses, /^account_id,firstName,lastName,email,street,city,zip,country,phone$/m)
 
 		const drop = await readFile(join(dir, 'drop.csv'), 'utf8')
-		assert.match(drop, /^sku,sizes,accounts_filter$/m)
+		assert.match(drop, /^sku,sizes,accounts_filter,country,name$/m)
 	})
 })
 

@@ -882,33 +882,43 @@ program
 						.map((id) => storedById.get(id))
 						.filter((a): a is NonNullable<typeof a> => a !== undefined)
 
+					const dropLabel = drop.name ? `${drop.name} (${drop.sku})` : drop.sku
 					console.log(
-						`[run] ${drop.sku} — resolving SKU → slug (${accounts.length} account(s))`,
+						`[run] ${dropLabel} — resolving SKU → slug (${accounts.length} account(s))`,
 					)
-					const controller = new AbortController()
-					// In dry-run (testing), don't block the queue forever on a SKU that
-					// isn't live yet — cap the wait so a non-live SKU is skipped and the
-					// next drop is tried. Real runs wait the full duration (that's the
-					// point of arming the bot before a drop).
-					let resolveTimer: ReturnType<typeof setTimeout> | undefined
-					if (opts.dryRun) {
-						resolveTimer = setTimeout(() => controller.abort(), 20_000)
-					}
 					let skuResolved: Awaited<ReturnType<typeof resolveSkuToSlug>>
-					try {
-						skuResolved = await resolveSkuToSlug(drop.sku, config, controller.signal, 3000)
-					} catch (err) {
-						if (resolveTimer) clearTimeout(resolveTimer)
-						if (controller.signal.aborted) {
-							console.log(
-								`[run] ${drop.sku} — pas encore dans le feed Nike (dry-run: ignoré). Utilise un SKU actuellement en vente pour tester.`,
-							)
-							continue
+					if (/^https?:\/\//i.test(drop.sku)) {
+						// The drop row gave a full product URL — use it directly, no feed
+						// resolution needed. styleColor is parsed from the trailing path
+						// segment when present (…/<slug>/<STYLECOLOR>).
+						const sc = /\/([A-Z0-9]{2,8}-[0-9]{2,4})(?:[/?#]|$)/i.exec(drop.sku)?.[1] ?? ''
+						skuResolved = { productUrl: drop.sku, slug: '', styleColor: sc }
+						console.log(`[run] ${dropLabel} → ${drop.sku} (URL directe)`)
+					} else {
+						const controller = new AbortController()
+						// In dry-run (testing), don't block the queue forever on a SKU that
+						// isn't live yet — cap the wait so a non-live SKU is skipped and the
+						// next drop is tried. Real runs wait the full duration (that's the
+						// point of arming the bot before a drop).
+						let resolveTimer: ReturnType<typeof setTimeout> | undefined
+						if (opts.dryRun) {
+							resolveTimer = setTimeout(() => controller.abort(), 20_000)
 						}
-						throw err
+						try {
+							skuResolved = await resolveSkuToSlug(drop.sku, config, controller.signal, 3000)
+						} catch (err) {
+							if (resolveTimer) clearTimeout(resolveTimer)
+							if (controller.signal.aborted) {
+								console.log(
+									`[run] ${dropLabel} — pas encore dans le feed Nike (dry-run: ignoré). Utilise un SKU en vente, ou colle l'URL complète du produit.`,
+								)
+								continue
+							}
+							throw err
+						}
+						if (resolveTimer) clearTimeout(resolveTimer)
+						console.log(`[run] ${dropLabel} → ${skuResolved.productUrl}`)
 					}
-					if (resolveTimer) clearTimeout(resolveTimer)
-					console.log(`[run] ${drop.sku} → ${skuResolved.productUrl}`)
 
 					const startedAt = new Date()
 					const retryController = new RetryController()

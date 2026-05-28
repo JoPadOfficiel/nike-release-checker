@@ -11,6 +11,7 @@ export type Drop = {
 	sizes: string[]
 	accountsFilter: AccountsFilter
 	country: string // always populated post-parse — defaults already applied
+	name?: string // optional human-friendly pair name (display only)
 }
 
 /**
@@ -45,11 +46,23 @@ export async function parseDropCsv(
 
 	rows.forEach((raw, idx) => {
 		const rowNum = rowToSourceLine[idx] ?? idx + 2
-		const sku = (raw.sku ?? '').trim().toUpperCase()
+		// The sku column accepts EITHER a Nike styleColor (e.g. IQ7604-101) OR a
+		// full product URL (e.g. https://www.nike.com/fr/t/.../IQ7604-101). A URL is
+		// kept verbatim (no upper-casing) and used directly at run time, skipping
+		// feed resolution.
+		const skuRaw = (raw.sku ?? '').trim()
+		const isUrl = /^https?:\/\//i.test(skuRaw)
+		const sku = isUrl ? skuRaw : skuRaw.toUpperCase()
 		const sizesRaw = raw.sizes ?? ''
-		const sizes = sizesRaw.split(';').map((s) => s.trim()).filter(Boolean)
+		// Accept both ';' and ',' as size separators. Note: a comma only reaches
+		// here if the sizes cell was quoted in the CSV (e.g. "42,42.5"); an
+		// unquoted comma would be a column break. Both separators are supported so
+		// users aren't tripped up by which one they used.
+		const sizes = sizesRaw.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
 		const filterRaw = (raw.accounts_filter ?? '').trim()
 		const countryRaw = (raw.country ?? '').trim()
+		// Optional display-only pair name (column "name"); never affects matching.
+		const name = (raw.name ?? '').trim() || undefined
 
 		if (!sku) {
 			errors.push({
@@ -60,12 +73,12 @@ export async function parseDropCsv(
 			})
 			return
 		}
-		if (!SKU_RE.test(sku)) {
+		if (!isUrl && !SKU_RE.test(sku)) {
 			warnings.push({
 				row: rowNum,
 				column: 'sku',
 				value: sku,
-				message: 'non-standard SKU format (expected AH7389-106 style)',
+				message: 'non-standard SKU format (expected AH7389-106 style, or a full product URL)',
 			})
 		}
 		if (sizes.length === 0) {
@@ -137,7 +150,7 @@ export async function parseDropCsv(
 			})
 		}
 		seenSkus.add(sku)
-		drops.push({ sku, sizes, accountsFilter, country: normalized })
+		drops.push({ sku, sizes, accountsFilter, country: normalized, ...(name ? { name } : {}) })
 	})
 
 	return { drops, errors, warnings }

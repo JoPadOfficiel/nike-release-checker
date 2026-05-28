@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { readCsvRows, type CsvIssue } from './csvRead.ts'
+import { normalizeProxyInput } from './proxyNormalize.ts'
 
 // Treat empty/missing CSV cells as "not provided" so `v.optional` can apply defaults.
 const OptionalCsvString = v.pipe(
@@ -21,6 +22,10 @@ export const AccountCsvRowSchema = v.object({
 	proxy_url: v.optional(
 		v.pipe(
 			OptionalCsvString,
+			// Accept the WebShare CSV export shape (host:port:user:pass) and bare
+			// host:port — normalize to a proper URL before URL validation so
+			// non-technical users don't have to reformat.
+			v.transform((val) => (typeof val === 'string' ? normalizeProxyInput(val) : val)),
 			v.union([
 				v.undefined(),
 				v.pipe(v.string(), v.url('proxy_url must be a valid URL (http/https/socks5)')),

@@ -1,5 +1,8 @@
 import type { BrowserContext } from 'playwright'
 import { maskProxy } from '../logger/credentialMasker.ts'
+import { normalizeProxyInput } from '../config/proxyNormalize.ts'
+
+export { normalizeProxyInput }
 
 export type ProxyTestResult =
 	| { status: 'ok'; ip: string; latencyMs: number }
@@ -82,9 +85,10 @@ export function parseProxyUrl(proxyUrl: string): {
 	username?: string
 	password?: string
 } {
+	const normalized = normalizeProxyInput(proxyUrl)
 	let url: URL
 	try {
-		url = new URL(proxyUrl)
+		url = new URL(normalized)
 	} catch {
 		throw new Error(`parseProxyUrl: invalid proxy URL: ${maskProxy(proxyUrl)}`)
 	}
@@ -105,10 +109,15 @@ export function parseProxyUrl(proxyUrl: string): {
 			`parseProxyUrl: missing port in proxy URL (required for ${url.protocol}): ${maskProxy(proxyUrl)}`,
 		)
 	}
+	// url.username/password are percent-encoded — decode so credentials with
+	// special chars round-trip correctly to setHTTPCredentials.
+	const decode = (s: string): string => {
+		try { return decodeURIComponent(s) } catch { return s }
+	}
 	return {
 		server: `${url.protocol}//${url.hostname}:${port}`,
-		username: url.username || undefined,
-		password: url.password || undefined,
+		username: url.username ? decode(url.username) : undefined,
+		password: url.password ? decode(url.password) : undefined,
 	}
 }
 

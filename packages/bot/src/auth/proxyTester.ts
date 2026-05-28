@@ -1,4 +1,5 @@
 import { maskProxy } from '../logger/credentialMasker.ts'
+import { normalizeProxyInput } from '../config/proxyNormalize.ts'
 import type { ProxyTestResult } from './auth.types.ts'
 
 const PROBE_URL = 'https://www.nike.com/'
@@ -10,7 +11,7 @@ export async function testProxyConnectivity(proxyUrl: string): Promise<ProxyTest
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
 	try {
-		const url = new URL(proxyUrl)
+		const url = new URL(normalizeProxyInput(proxyUrl))
 		const proxyAuth =
 			url.username && url.password
 				? `Basic ${Buffer.from(`${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`).toString('base64')}`

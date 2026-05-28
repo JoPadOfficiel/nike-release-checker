@@ -10,7 +10,7 @@ const CARDS_TEMPLATE = 'account_id,card_number,expiry,cvv,holder_name\n'
 
 const ADDRESSES_TEMPLATE = 'account_id,firstName,lastName,email,street,city,zip,country,phone\n'
 
-const DROP_TEMPLATE = 'sku,sizes,accounts_filter\n'
+const DROP_TEMPLATE = 'sku,sizes,accounts_filter,country,name\n'
 
 const INSTRUCTIONS = `Nike Bot — how to fill the CSV files
 ======================================
@@ -27,13 +27,18 @@ Columns:
                     (letters, digits, underscore, hyphen)
   email             Nike login email
   password          Nike login password (stored locally only)
-  proxy_url         optional. http://user:pass@host:port  or  socks5://host:port
+  proxy_url         optional. Paste it in ANY of these forms — the bot converts it:
+                      host:port:user:pass   (WebShare CSV export — just paste as-is)
+                      http://user:pass@host:port
+                      socks5://host:port
+                      host:port             (no auth)
                     leave empty if you don't use a proxy
   country           ISO 2-letter code, e.g. FR, US, DE, JP
   preferred_sizes   sizes separated by ";"   e.g.   42;42.5;43
 
-Example row:
-  kev_001,kevin@example.com,MyP4ss!,http://user:pass@proxy1.com:8080,FR,42;42.5;43
+Example rows:
+  kev_001,kevin@example.com,MyP4ss!,64.137.10.153:5803:user:pass,FR,42;42.5;43
+  kev_002,jo@example.com,MyP4ss!,http://user:pass@proxy1.com:8080,FR,42
 
 ----------------------------------------------------------------------
 cards.csv
@@ -72,13 +77,17 @@ Example row:
 drop.csv
 ----------------------------------------------------------------------
 Columns:
-  sku                Nike SKU, e.g. AH7389-106
-  sizes              ";"-separated sizes you want   e.g. 42;42.5;43
+  sku                Nike SKU / styleColor, e.g. IQ7604-101
+  sizes              sizes you want, separated by ";" (or use "," inside quotes)
+                       e.g.  42;42.5;43    or    "42,42.5,43"
   accounts_filter    "all"   OR   ";"-separated account_ids   e.g. kev_001;kev_002
+  country            optional ISO 2-letter code (default FR)
+  name               optional — a label for the pair so you recognise it
+                       (display only, never affects matching)
 
 Example rows:
-  AH7389-106,42;42.5;43,all
-  IQ7604-101,40;41,kev_001;kev_002
+  IQ7604-101,42;42.5;43,all,FR,Travis Scott AJ1 Low
+  IQ3916-100,"42,43",kev_001,FR,Dunk Low Panda
 `
 
 export type TemplateKey = 'accounts' | 'cards' | 'addresses' | 'drop'
