@@ -1,5 +1,28 @@
 # @nike-release-checker/cli
 
+## 0.3.9
+
+### Patch Changes
+
+- 5d0c0dd: Keep cached product images across selection changes and clear the image cache directory only when starting a new CLI run.
+- fbd5149: Fix a Windows freeze by mounting `ink-picture`’s `TerminalInfoProvider` only around the Product screen instead of the whole CLI.
+
+## 0.3.8
+
+### Patch Changes
+
+- c7b2263: chore: update dependencies
+- Updated dependencies [cb80984]
+- Updated dependencies [c7b2263]
+  - @nike-release-checker/sdk@0.5.0
+
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [a62a061]
+  - @nike-release-checker/sdk@0.4.4
+
 ## 0.3.6
 
 ### Patch Changes

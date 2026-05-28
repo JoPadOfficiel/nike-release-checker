@@ -4,11 +4,13 @@ import { rspack } from '@rspack/core'
 // @ts-expect-error no types
 import seaNativeBootstrapFn from './scripts/sea-native-bootstrap.cjs'
 
+import type { SwcLoaderOptions } from '@rspack/core'
+
 const createStringIife = (fn: () => void) => `;(${fn.toString()})();`
 
 export default defineConfig({
 	entry: './src/index.tsx',
-	target: 'node24.11',
+	target: 'node24.14',
 	output: {
 		filename: 'bundle.cjs',
 		chunkFormat: 'commonjs',
@@ -64,11 +66,12 @@ export default defineConfig({
 					{
 						loader: 'builtin:swc-loader',
 						options: {
+							// detectSyntax: 'auto', // allow omitting `parser: { syntax: 'typescript', tsx: true }`
 							jsc: {
 								parser: { syntax: 'typescript', tsx: true },
 								transform: { react: { runtime: 'automatic' } },
 							},
-						},
+						} satisfies SwcLoaderOptions,
 					},
 				],
 			},

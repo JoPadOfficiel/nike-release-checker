@@ -1,5 +1,23 @@
 # @nike-release-checker/sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- cb80984: Add compiled JS output to published tarball
+
+  SDK release tarball now includes compiled JavaScript and TypeScript declaration files in `dist/` instead of raw TypeScript sources. The `publishConfig.exports` field redirects consumers to `./dist/*.js` entries, while local monorepo usage continues to resolve `.ts` files directly.
+
+### Patch Changes
+
+- c7b2263: chore: update dependencies
+
+## 0.4.4
+
+### Patch Changes
+
+- a62a061: Accept `button` as a valid `actionType` in the product feed `ActionSchema` to handle API responses (e.g. US marketplace) that include this value alongside `cta_buying_tools` and `minicard_link`.
+
 ## 0.4.3
 
 ### Patch Changes
