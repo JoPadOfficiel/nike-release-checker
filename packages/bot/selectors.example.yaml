@@ -104,14 +104,14 @@ cart:
 
 checkout:
   # ✓ Shipping continue — text-based since Nike checkout has no data-testid
-  shippingContinueButton: 'button[type="submit"]:has-text("Enregistrer et continuer")'
+  shippingContinueButton: 'button[type="submit"]:text-matches("Paiement|Enregistrer et continuer|Continue", "i")'
   paymentSection: 'h2:has-text("Paiement"), [class*="payment-form"]'
-  # ⚠ Payment continue — guessed, verify with a fully filled-out checkout flow
+  # ✓ Payment continue (optional in the single-page flow) — best-effort click
   paymentContinueButton: 'button[type="submit"]:has-text("Continuer")'
   threeDSIframe: 'iframe[src*="acs"], iframe[src*="3ds"], iframe[name*="threeDSIframe"]'
-  # ⚠ Submit order — verify on real checkout
-  submitOrderButton: 'button[type="submit"]:has-text("Passer la commande"), button[type="submit"]:has-text("Acheter")'
-  orderConfirmation: 'h1:has-text("Commande confirmée"), h1:has-text("Merci")'
+  # ✓ Submit order — final "Passer la commande" on the order-summary step
+  submitOrderButton: 'button:has-text("Passer la commande"), button:has-text("Payer maintenant"), button[type="submit"]:has-text("Acheter"), button[type="submit"]:text-matches("Passer la commande|Acheter|Payer", "i"), [aria-label*="Passer la commande" i]'
+  orderConfirmation: 'h1:has-text("Commande confirmée"), h1:has-text("Merci"), h2:has-text("Commande confirmée"), h1:has-text("Merci pour ta commande"), [data-testid*="confirmation" i]'
 
 # ========== COOKIE CONSENT ==========
 # ✓ Nike shows a modal on every page load that blocks interaction.

@@ -58,6 +58,9 @@ function makePage(locators: Record<string, FakeLocator>) {
 		},
 		async waitForSelector(): Promise<void> { /* noop */ },
 		async waitForTimeout(): Promise<void> { /* noop */ },
+		// No saved card text in tests → card verification is a no-op.
+		async evaluate(): Promise<string> { return '' },
+		keyboard: { async press(): Promise<void> { /* noop */ } },
 		mouse: {
 			async move(): Promise<void> { /* noop */ },
 			async wheel(): Promise<void> { /* noop */ },

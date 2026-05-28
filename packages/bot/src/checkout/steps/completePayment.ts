@@ -2,6 +2,7 @@ import type { Page, Locator, FrameLocator } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
 import { naturalClick } from '../naturalClick.ts'
+import { displayedCardMatches } from './cardMatcher.ts'
 
 export interface CardData {
 	number: string
@@ -74,6 +75,37 @@ export async function completePayment(
 				await creditRadio.check().catch(() => {})
 				// Give the card iframe a moment to mount.
 				await page.waitForSelector('iframe[src*="paymentcc.nike.com"]', { timeout: innerTimeout }).catch(() => {})
+			}
+
+			// Card verification: Nike may show a SAVED card (masked "•••• 1234") on a
+			// returning account. Make sure it's the card the operator configured.
+			//   - matches target last4  → keep it, no re-entry needed.
+			//   - different card        → click "Utiliser une autre carte / Ajouter
+			//                             une carte" to reveal the new-card form, then
+			//                             fall through to fill the configured card.
+			// Best-effort + fallback: never throw on this path.
+			if (opts.card) {
+				const pageText = await page.evaluate(() => document.body.innerText).catch(() => '')
+				const hasMaskedCard = /(?:[•·*●]\s?){2,}\d{4}|se\s+terminant\s+par\s+\d{4}|ending\s+in\s+\d{4}/i.test(pageText)
+				if (hasMaskedCard) {
+					if (displayedCardMatches(pageText, opts.card.number)) {
+						return 'payment-saved-card-matched'
+					}
+					console.warn(
+						'[payment] saved card does not match the configured card — switching to a new card',
+					)
+					const useOther = await findFirstVisibleIn(page, [
+						'button:has-text("Utiliser une autre carte")',
+						'button:has-text("Ajouter une carte")',
+						'button:has-text("Ajouter une nouvelle carte")',
+						'button:has-text("Use a different card")',
+						'button:has-text("Add a card")',
+					])
+					if (useOther) {
+						await useOther.click().catch(() => {})
+						await page.waitForSelector('iframe[src*="paymentcc.nike.com"]', { timeout: innerTimeout }).catch(() => {})
+					}
+				}
 			}
 
 			// Card fields live inside Nike's hosted PCI iframe — historically Adyen
