@@ -1,5 +1,23 @@
+import { existsSync } from 'node:fs'
 import { Command } from 'commander'
 import type { CheckoutResult } from '../tui/SummaryScreen.tsx'
+import { dataFile } from '../config/dataDir.ts'
+
+/**
+ * Default path for a user-editable config file. Prefers the shared data folder
+ * (~/Downloads/nikebot — where the setup wizard writes the templates the user
+ * fills in), falling back to the current directory for power users who keep
+ * files alongside the binary. Evaluated at module load, which is fine: the data
+ * folder location is stable for a given machine.
+ */
+function configDefault(name: string): string {
+	const inDataDir = dataFile(name)
+	if (existsSync(inDataDir)) return inDataDir
+	if (existsSync(`./${name}`)) return `./${name}`
+	// Neither exists yet → point at the data folder so error messages guide the
+	// user to the canonical place to create it.
+	return inDataDir
+}
 
 // Version is injected at build time via esbuild `define` (__BOT_VERSION__).
 // Touching `globalThis.require` in a Node SEA throws synchronously
@@ -317,7 +335,7 @@ program
 	.requiredOption('--sku <sku>', 'Nike SKU / styleColor code (e.g. IQ7604-101)')
 	.requiredOption('--profile <account_id>', 'Account ID to use for checkout')
 	.option('--sizes <sizes>', 'Target EU sizes comma-separated (e.g. 40,40.5,41)')
-	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.option('--selectors <path>', 'Path to selectors YAML file', configDefault('selectors.yaml'))
 	.option('--dry-run', 'Simulate checkout without placing real order', false)
 	.option('--poll-interval <ms>', 'Feed poll interval in ms (default: 3000)', '3000')
 	.option('--timeout <ms>', 'Max time to wait for SKU to appear in ms (default: 3600000 = 1h)', '3600000')
@@ -389,9 +407,9 @@ program
 	.requiredOption('--slug <slug>', 'Nike product slug')
 	.requiredOption('--profile <account_id>', 'Account ID to use for the dry run')
 	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
-	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.option('--selectors <path>', 'Path to selectors YAML file', configDefault('selectors.yaml'))
 	.option('--url <url>', 'Full product URL (overrides slug-based URL)')
-	.option('--addresses-csv <path>', 'Path to addresses.csv', './addresses.csv')
+	.option('--addresses-csv <path>', 'Path to addresses.csv', configDefault('addresses.csv'))
 	.option('--unlock-cards', 'Decrypt the card from cards.db (prompts for passphrase)', false)
 	.action(async (opts: { slug: string; profile: string; sizes?: string; selectors?: string; url?: string; addressesCsv: string; unlockCards?: boolean }) => {
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
@@ -517,7 +535,7 @@ program
 	.option('--sizes <sizes>', 'Target sizes comma-separated (e.g. 42,42.5,43)')
 	.option('--account <id>', 'Run checkout for a single account by ID')
 	.option('--dry-run', 'Simulate checkout without placing real orders', false)
-	.option('--selectors <path>', 'Path to selectors YAML file', './selectors.yaml')
+	.option('--selectors <path>', 'Path to selectors YAML file', configDefault('selectors.yaml'))
 	.action(async (opts: { slug: string; sizes?: string; account?: string; dryRun?: boolean; selectors?: string }) => {
 		const { maskCredentials } = await import('../logger/credentialMasker.ts')
 		const { runParallelCheckout } = await import('../checkout/parallelCheckout.ts')
@@ -751,9 +769,9 @@ program
 program
 	.command('run')
 	.description('Execute drops from drop.csv with live TUI dashboard')
-	.option('--drops <path>', 'Path to drop.csv', './drop.csv')
-	.option('--accounts-csv <path>', 'Path to accounts.csv', './accounts.csv')
-	.option('--selectors <path>', 'Path to selectors YAML', './selectors.yaml')
+	.option('--drops <path>', 'Path to drop.csv', configDefault('drop.csv'))
+	.option('--accounts-csv <path>', 'Path to accounts.csv', configDefault('accounts.csv'))
+	.option('--selectors <path>', 'Path to selectors YAML', configDefault('selectors.yaml'))
 	.option('--dry-run', 'Run pipeline without submitting orders', false)
 	.action(
 		async (opts: {

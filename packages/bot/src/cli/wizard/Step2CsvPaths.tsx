@@ -2,10 +2,10 @@
 import { useEffect, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { generateTemplates } from './csvTemplates.ts'
 import { parseAccountsCsv } from '../../config/accountsCsv.ts'
+import { dataDir as sharedDataDir } from '../../config/dataDir.ts'
 
 export interface CsvPaths {
 	accounts: string
@@ -23,9 +23,9 @@ export interface Step2Props {
 }
 
 function defaultDataDir(): string {
-	// User Downloads folder is standard on macOS / Linux / Windows and is the
-	// easiest place for non-technical users to find the CSV files.
-	return join(homedir(), 'Downloads', 'nikebot')
+	// Single source of truth shared with the runtime commands (see config/dataDir.ts)
+	// so the wizard writes the CSVs where `run`/`dry-run` later read them.
+	return sharedDataDir()
 }
 
 function openInFileManager(folder: string): void {
