@@ -817,6 +817,16 @@ program
 					console.warn(`⚠️  drop.csv row ${w.row} [${w.column}]: ${w.message}`)
 				}
 
+				// No active drops → tell the user how to add one instead of exiting silently.
+				if (dropParse.drops.length === 0) {
+					console.log('')
+					console.log(`Aucun drop actif dans ${opts.drops}.`)
+					console.log('Ajoute une ligne (sans #) au format : sku,sizes,accounts_filter')
+					console.log('Exemple : IQ7604-101,"40;41",all')
+					console.log('Puis relance.')
+					return
+				}
+
 				// 3. Stored accounts (already imported via `nike-bot import-accounts`)
 				const stored = await loadStoredAccounts()
 				const storedById = new Map(stored.map((a) => [a.id, a]))
