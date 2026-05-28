@@ -87,11 +87,22 @@ export async function createRealCheckoutContext(
         'https://accounts.nike.com',
         'https://api.nike.com',
       ])
-      const hasSid = allCookies.some((c) => c.name === 'sid')
+      const sidCookie = allCookies.find((c) => c.name === 'sid')
+      const hasSid = Boolean(sidCookie)
       const hasOidc = allCookies.some((c) => c.name.startsWith('oidc.'))
       console.log(`  [auth] cookie check (multi-origin): sid=${hasSid}, oidc=${hasOidc}, total=${allCookies.length}`)
       if (!hasSid) {
         throw new Error(`Session snapshot missing for account '${accountId}'. Run 'nike-bot capture-session --account ${accountId}' to refresh.`)
+      }
+      // Fail fast (and clearly) if sid is present but EXPIRED — otherwise the
+      // first protected API call 401s mid-checkout and surfaces as a generic
+      // error after retry exhaustion, which is the worst time to discover it.
+      const sidExpires = sidCookie?.expires
+      if (typeof sidExpires === 'number' && sidExpires > 0 && sidExpires < Date.now() / 1000) {
+        const when = new Date(sidExpires * 1000).toISOString()
+        throw new Error(
+          `Session for '${accountId}' has EXPIRED (sid expired ${when}). Run 'nike-bot capture-session --account ${accountId}' to refresh before the drop.`,
+        )
       }
       // Fallback (original full OAuth handshake) — kept for reference if cookie
       // check turns out to be insufficient on some flows:
