@@ -371,7 +371,8 @@ program
 			console.log(`[drop] Result: ${result.finalOutcome} (${result.durationMs}ms)`)
 			for (const step of result.steps) {
 				const status = step.outcome === 'success' ? '✓' : '✗'
-				console.log(`  ${status} ${step.step}: ${step.outcome}${step.details ? ` — ${step.details}` : ''}`)
+				const detail = step.details ? ` — ${step.details}` : step.error ? ` — ${maskCredentials(step.error)}` : ''
+				console.log(`  ${status} ${step.step}: ${step.outcome}${detail}`)
 			}
 			if (result.finalOutcome !== 'success' && result.finalOutcome !== '3ds_success' && result.finalOutcome !== 'no_session') {
 				process.exit(1)
@@ -412,6 +413,21 @@ program
 			const selectors = await loadSelectors(opts.selectors)
 			const targetSizes = opts.sizes ? opts.sizes.split(',').map((s) => s.trim()) : account.preferredSizes ?? []
 			const productUrl = opts.url ?? `https://www.nike.com/fr/launch/t/${opts.slug}`
+
+			// Derive slug + styleColor for the API (hybrid) pipeline. Nike PDP URLs
+			// are `/fr/t/<slug>/<styleColor>` (styleColor like "IO1560-900"). The
+			// hybrid pipeline uses styleColor as the Product Feed key when the
+			// __NEXT_DATA__ hydration SKU lookup misses, so without it the SKU
+			// resolver returns HTTP 400. Fall back to the --slug flag otherwise.
+			let resolvedSlug = opts.slug
+			let resolvedStyleColor = ''
+			{
+				const m = /\/t\/([^/]+)\/([A-Z0-9]+-[0-9]+)/i.exec(productUrl)
+				if (m) {
+					resolvedSlug = m[1] ?? opts.slug
+					resolvedStyleColor = m[2] ?? ''
+				}
+			}
 
 			// 1. Load shipping address from addresses.csv (if file exists).
 			let shippingAddress: { street: string; city: string; zip: string; country: string; phone?: string; email?: string; firstName?: string; lastName?: string } | undefined
@@ -472,6 +488,9 @@ program
 			const result = await runCheckoutPipeline(account, config, selectors, {
 				productUrl,
 				targetSizes,
+				slug: resolvedSlug,
+				styleColor: resolvedStyleColor,
+				country: account.country,
 				dryRun: true,
 				shippingAddress,
 				card,
@@ -479,7 +498,8 @@ program
 			console.log(`[DRY-RUN] Result: ${result.finalOutcome} (${result.durationMs}ms)`)
 			for (const step of result.steps) {
 				const status = step.outcome === 'success' ? '✓' : '✗'
-				console.log(`  ${status} ${step.step}: ${step.outcome}${step.details ? ` — ${step.details}` : ''}`)
+				const detail = step.details ? ` — ${step.details}` : step.error ? ` — ${maskCredentials(step.error)}` : ''
+				console.log(`  ${status} ${step.step}: ${step.outcome}${detail}`)
 			}
 			if (result.finalOutcome !== 'success' && result.finalOutcome !== '3ds_success' && result.finalOutcome !== 'no_session') {
 				process.exit(1)

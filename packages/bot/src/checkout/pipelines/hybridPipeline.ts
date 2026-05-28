@@ -19,7 +19,7 @@ import { logStep } from '../../logger/logger.ts'
 import { printStepResult } from '../../logger/terminal.ts'
 import { globalBus } from '../../tui/eventBus.ts'
 import { classifyOutcome } from '../outcomeClassifier.ts'
-import { selectSize } from '../steps/selectSize.ts'
+import { navigatePdp } from '../steps/navigatePdp.ts'
 import { handle3DSIfRequired } from '../steps/handle3DS.ts'
 import { harvestSkuId } from '../dom/harvestSkuId.ts'
 import { mapErrorToOutcome } from '../mapErrorToOutcome.ts'
@@ -143,17 +143,20 @@ export async function runHybridPipeline(
 		// the protected requests emitted by Nike's own page scripts.
 		getKpsdkExtractor(page, country)
 
-		// ── Step 1: DOM — PDP navigate + size click ───────────────────────────────
+		// ── Step 1: DOM — PDP navigate ONLY (no size click) ───────────────────────
+		// The API path resolves the SKU for the target size via harvestSkuId and
+		// carts it through the API, so we never need to click the size grid. This
+		// keeps the bot decoupled from Nike's volatile size-grid DOM selectors.
 		globalBus.emit('accountStatusChanged', {
 			accountId: account.id,
-			status: { kind: 'waiting', step: 'selectSize' },
+			status: { kind: 'waiting', step: 'navigatePdp' },
 		})
-		const sizeResult = await selectSize(page, productUrl, targetSizes, selectors, stepTimeoutMs)
-		steps.push(sizeResult)
-		logStep(account.email, sizeResult)
-		printStepResult(sizeResult)
-		if (sizeResult.outcome !== 'success') {
-			return buildResult(account.id, maskedEmail, steps, sizeResult.outcome, pipelineStart)
+		const navResult = await navigatePdp(page, productUrl, selectors, stepTimeoutMs)
+		steps.push(navResult)
+		logStep(account.email, navResult)
+		printStepResult(navResult)
+		if (navResult.outcome !== 'success') {
+			return buildResult(account.id, maskedEmail, steps, navResult.outcome, pipelineStart)
 		}
 
 		// ── Step 2: DOM/SDK — harvest skuId ──────────────────────────────────────

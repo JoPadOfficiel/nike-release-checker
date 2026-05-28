@@ -20,6 +20,14 @@ import type { FinalOutcome } from './outcomeClassifier.ts'
 import type { ShippingAddress } from './steps/completeShipping.ts'
 import type { CardData } from './steps/completePayment.ts'
 import { runDomPipeline } from './pipelines/domPipeline.ts'
+// Static import (NOT dynamic). A runtime `await import('./pipelines/hybridPipeline.ts')`
+// makes tsx compile the whole hybrid module graph synchronously WHILE a CDP
+// browser is already connected — the JS thread stalls long enough that the
+// patchright/CDP WebSocket heartbeat times out and the browser disconnects,
+// surfacing as "Target page, context or browser has been closed" on the very
+// next page.goto. Importing at module load (before any browser launch) avoids
+// the mid-session compile stall.
+import { runHybridPipeline } from './pipelines/hybridPipeline.ts'
 
 export interface CheckoutPipelineResult {
   accountId: string
@@ -111,8 +119,11 @@ async function safeCreateRealCheckoutContext(
 function resolvePipelineMode(config: BotConfig): 'dom' | 'hybrid' {
   const explicit = config.checkout?.pipeline
   if (explicit !== undefined) return explicit
-  if (config.checkout?.tier === 'saas') return 'hybrid'
-  return 'dom'
+  // API-first by default. The hybrid pipeline carts + checks out entirely via
+  // Nike's API (KPSDK-signed), which is far more robust than scraping the DOM
+  // (Nike changes PDP/checkout selectors frequently). Set checkout.pipeline:
+  // 'dom' explicitly only for debugging the legacy DOM path.
+  return 'hybrid'
 }
 
 export async function runCheckoutPipeline(
@@ -152,10 +163,14 @@ export async function runCheckoutPipeline(
     const page = await handle.context.newPage()
     const mode = resolvePipelineMode(config)
 
+    // NOTE: `return await` (NOT bare `return`). A bare `return somePromise`
+    // inside this try runs the `finally { await handle.close() }` block the
+    // instant the promise is *created*, not when it *settles* — closing the
+    // browser mid-pipeline and failing the first page.goto with "Target page,
+    // context or browser has been closed". `await` defers the finally until the
+    // pipeline actually completes.
     if (mode === 'hybrid') {
-      // Dynamic import so dom-only deployments don't pay the parse cost.
-      const { runHybridPipeline } = await import('./pipelines/hybridPipeline.ts')
-      return runHybridPipeline(page, account, config, selectors, {
+      return await runHybridPipeline(page, account, config, selectors, {
         productUrl,
         targetSizes,
         styleColor: options.styleColor ?? '',
@@ -179,7 +194,7 @@ export async function runCheckoutPipeline(
     }
 
     // DOM pipeline — v2 path unchanged.
-    return runDomPipeline(page, account, config, selectors, {
+    return await runDomPipeline(page, account, config, selectors, {
       productUrl,
       targetSizes,
       dryRun,
