@@ -900,9 +900,11 @@ program
 						// isn't live yet — cap the wait so a non-live SKU is skipped and the
 						// next drop is tried. Real runs wait the full duration (that's the
 						// point of arming the bot before a drop).
+						const waitLiveResolveSec = Number.parseInt(opts.waitLive ?? '0', 10)
+						const resolveCapMs = waitLiveResolveSec > 0 ? waitLiveResolveSec * 1000 : (opts.dryRun ? 20_000 : 0)
 						let resolveTimer: ReturnType<typeof setTimeout> | undefined
-						if (opts.dryRun) {
-							resolveTimer = setTimeout(() => controller.abort(), 20_000)
+						if (resolveCapMs > 0) {
+							resolveTimer = setTimeout(() => controller.abort(), resolveCapMs)
 						}
 						try {
 							skuResolved = await resolveSkuToSlug(drop.sku, config, controller.signal, 3000)
@@ -932,6 +934,7 @@ program
 								sku: drop.sku,
 								sizes: drop.sizes,
 								accountIds: runAccounts.map((a) => a.id),
+								...(drop.name ? { name: drop.name } : {}),
 								onFinished: () => { /* noop */ },
 							}),
 						)

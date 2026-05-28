@@ -131,11 +131,14 @@ async function resolveHomeAction(): Promise<string[]> {
 			}
 			// Operate actions: dispatch the matching command and leave the loop.
 			case 'run':
-				// Armed for a real drop: keep re-attempting until the pair goes live
-				// (up to 10 min) so we catch the exact drop second.
-				return ['run', '--wait-live', '600']
+				// Armed for a real drop: keep re-attempting (polling the feed +
+				// reloading the PDP) until the pair goes live — up to 1h — so the bot
+				// catches the exact drop second and cops automatically.
+				return ['run', '--wait-live', '3600']
 			case 'run:dry':
-				return ['run', '--dry-run']
+				// Same arming behaviour but WITHOUT ordering, so you can leave it
+				// running and watch it auto-checkout (dry) the moment the pair drops.
+				return ['run', '--dry-run', '--wait-live', '3600']
 			case 'capture': {
 				const id = await firstAccountId()
 				if (!id) {

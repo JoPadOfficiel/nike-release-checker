@@ -17,10 +17,11 @@ export interface DashboardProps {
 	sku: string
 	sizes: string[]
 	accountIds: string[]
+	name?: string // optional pair name (display label)
 	onFinished: (summary: { cops: number; failures: number; rows: RowState[] }) => void
 }
 
-export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps) => {
+export const Dashboard = ({ sku, sizes, accountIds, name, onFinished }: DashboardProps) => {
 	const { exit } = useApp()
 	const [rows, setRows] = useState<RowState[]>(
 		accountIds.map((id) => ({
@@ -84,7 +85,7 @@ export const Dashboard = ({ sku, sizes, accountIds, onFinished }: DashboardProps
 			<Box flexDirection='column'>
 				<Box>
 					<Text bold>Drop: </Text>
-					<Text color='cyan'>{sku}</Text>
+					<Text color='cyan'>{name ? `${name} (${sku})` : sku}</Text>
 					<Text> — Sizes: </Text>
 					<Text>{sizes.join(', ')}</Text>
 					<Text> — Accounts: </Text>
