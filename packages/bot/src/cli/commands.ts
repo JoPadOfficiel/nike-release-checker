@@ -876,12 +876,28 @@ program
 						`[run] ${drop.sku} — resolving SKU → slug (${accounts.length} account(s))`,
 					)
 					const controller = new AbortController()
-					const skuResolved = await resolveSkuToSlug(
-						drop.sku,
-						config,
-						controller.signal,
-						3000,
-					)
+					// In dry-run (testing), don't block the queue forever on a SKU that
+					// isn't live yet — cap the wait so a non-live SKU is skipped and the
+					// next drop is tried. Real runs wait the full duration (that's the
+					// point of arming the bot before a drop).
+					let resolveTimer: ReturnType<typeof setTimeout> | undefined
+					if (opts.dryRun) {
+						resolveTimer = setTimeout(() => controller.abort(), 20_000)
+					}
+					let skuResolved: Awaited<ReturnType<typeof resolveSkuToSlug>>
+					try {
+						skuResolved = await resolveSkuToSlug(drop.sku, config, controller.signal, 3000)
+					} catch (err) {
+						if (resolveTimer) clearTimeout(resolveTimer)
+						if (controller.signal.aborted) {
+							console.log(
+								`[run] ${drop.sku} — pas encore dans le feed Nike (dry-run: ignoré). Utilise un SKU actuellement en vente pour tester.`,
+							)
+							continue
+						}
+						throw err
+					}
+					if (resolveTimer) clearTimeout(resolveTimer)
 					console.log(`[run] ${drop.sku} → ${skuResolved.productUrl}`)
 
 					const startedAt = new Date()
