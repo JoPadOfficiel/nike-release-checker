@@ -131,7 +131,9 @@ async function resolveHomeAction(): Promise<string[]> {
 			}
 			// Operate actions: dispatch the matching command and leave the loop.
 			case 'run':
-				return ['run']
+				// Armed for a real drop: keep re-attempting until the pair goes live
+				// (up to 10 min) so we catch the exact drop second.
+				return ['run', '--wait-live', '600']
 			case 'run:dry':
 				return ['run', '--dry-run']
 			case 'capture': {

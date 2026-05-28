@@ -781,12 +781,14 @@ program
 	.option('--accounts-csv <path>', 'Path to accounts.csv', configDefault('accounts.csv'))
 	.option('--selectors <path>', 'Path to selectors YAML', configDefault('selectors.yaml'))
 	.option('--dry-run', 'Run pipeline without submitting orders', false)
+	.option('--wait-live <seconds>', 'Keep re-attempting a not-yet-live drop until it goes live (drop-day arming). 0 = single pass.', '0')
 	.action(
 		async (opts: {
 			drops: string
 			accountsCsv: string
 			selectors: string
 			dryRun?: boolean
+			waitLive?: string
 		}) => {
 			const { maskCredentials } = await import('../logger/credentialMasker.ts')
 			const { parseAccountsCsv } = await import('../config/accountsCsv.ts')
@@ -944,10 +946,36 @@ program
 					}
 
 					// 5. Initial run.
-					const results = await runCheckout(accounts)
+					let results = await runCheckout(accounts)
 
 					// Accumulate all results across original + retry rounds.
 					const allResults: CheckoutResult[] = [...results]
+
+					// 5b. Drop-day auto re-poll: when armed before a launch, the SKU is
+					// in the feed but the PDP still shows "Prévenir" (not live), so the
+					// first pass returns SOLD_OUT. With --wait-live > 0, keep re-running
+					// (reloading the PDP) until a COP, a non-recoverable failure, or the
+					// deadline. This is what lets the bot catch the exact drop second.
+					const waitLiveSec = Number.parseInt(opts.waitLive ?? '0', 10)
+					if (waitLiveSec > 0 && !Number.isNaN(waitLiveSec)) {
+						const deadline = Date.now() + waitLiveSec * 1000
+						// "Not live yet / transient" statuses worth re-attempting. We do
+						// NOT loop on COP (done) or on hard stops like NO_SESSION/BLOCKED.
+						const RETRYABLE = new Set(['SOLD_OUT', 'ERROR', 'THREEDS_TIMEOUT'])
+						const pollMs = 5000
+						let round = 0
+						while (Date.now() < deadline) {
+							if (results.some((r) => r.status === 'COP')) break
+							const allRetryable = results.length > 0 && results.every((r) => RETRYABLE.has(r.status))
+							if (!allRetryable) break // e.g. NO_SESSION/BLOCKED → stop, surface to user
+							round++
+							const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000))
+							console.log(`[run] ${drop.sku} — pas encore en vente, nouvelle tentative (round ${round}, ${remaining}s restantes)…`)
+							await new Promise((r) => setTimeout(r, pollMs))
+							results = await runCheckout(accounts)
+							allResults.push(...results)
+						}
+					}
 
 					// Retry loop: summary → [R] → retry selection → dashboard → summary → ...
 					// `savedReportFile` tracks the CSV created on the first summary render
