@@ -5,6 +5,13 @@ import { SummaryScreen } from './SummaryScreen.tsx'
 import type { CheckoutResult } from './SummaryScreen.tsx'
 import { writeReport } from '../logger/reportWriter.ts'
 import type { RetryController } from '../checkout/retryController.ts'
+import { join } from 'node:path'
+import { dataDir } from '../config/dataDir.ts'
+
+// Reports live in <data folder>/reports — the same place (Downloads/nikebot by
+// default) where the user keeps their CSVs, so completed-order reports are easy
+// to find next to the inputs that produced them.
+const REPORTS_DIR = join(dataDir(), 'reports')
 
 function toReportRow(r: CheckoutResult, retryController?: RetryController) {
 	return {
@@ -52,11 +59,11 @@ export async function renderSummary(
 	let reportPath: string | undefined
 	try {
 		if (opts.reportFile) {
-			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), './reports', {
+			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), REPORTS_DIR, {
 				appendToFile: opts.reportFile,
 			})
 		} else {
-			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), './reports')
+			reportPath = await writeReport(results.map((r) => toReportRow(r, opts.retryController)), REPORTS_DIR)
 		}
 	} catch (err: unknown) {
 		const msg = err instanceof Error ? err.message : String(err)

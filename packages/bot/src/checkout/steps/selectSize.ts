@@ -39,10 +39,55 @@ export async function selectSize(
       // Trigger lazy hydration of size grid (often below initial viewport on Nike PDPs)
       await page.evaluate(() => window.scrollTo(0, 800)).catch(() => {})
       await page.waitForTimeout(300)
+
       // Generous selector wait — React hydration on a fully loaded PDP can take 5-10s
       // on cold cache. Spend most of the step budget here.
       const selectorTimeout = Math.max(Math.floor(timeoutMs * 0.6), 5000)
-      await page.waitForSelector(selectors.productPage.sizeGrid, { timeout: selectorTimeout, state: 'attached' })
+
+      // A SNKRS product that hasn't dropped yet shows a "Prévenir / Notify me /
+      // Bientôt disponible" CTA and NO size grid. Race the size grid against
+      // that not-available signal so we DON'T burn the whole timeout on an
+      // unreleased pair — instead surface SOLD_OUT fast so the caller (run loop)
+      // moves to the next drop. Broaden the grid wait to cover both the catalog
+      // (/fr/t/) and SNKRS launch (/fr/launch/t/) DOM variants.
+      const gridSelector = [
+        selectors.productPage.sizeGrid,
+        '[data-testid="pdp-grid-selector-item"]',
+        '[data-testid="size-selector"] input[type="radio"]',
+        '[data-testid="grid-selector-input"]',
+      ].filter(Boolean).join(', ')
+      const notAvailableSelector = [
+        selectors.productPage.soldOutIndicator,
+        'button:has-text("Prévenir")',
+        'button:has-text("Me prévenir")',
+        'button:has-text("Notify me")',
+        'button:has-text("Notifiez-moi")',
+        'button:has-text("Bientôt disponible")',
+        'button:has-text("Coming soon")',
+        '[data-testid="sold-out-indicator"]',
+      ].filter(Boolean).join(', ')
+
+      const outcome = await Promise.race([
+        page.waitForSelector(gridSelector, { timeout: selectorTimeout, state: 'attached' })
+          .then(() => 'grid' as const)
+          .catch(() => null),
+        page.waitForSelector(notAvailableSelector, { timeout: selectorTimeout, state: 'visible' })
+          .then(() => 'unavailable' as const)
+          .catch(() => null),
+      ])
+      if (outcome === 'unavailable') {
+        throw Object.assign(
+          new Error('Produit pas encore en vente (bouton Prévenir / sold out) — passage au suivant'),
+          { code: 'SOLD_OUT' },
+        )
+      }
+      if (outcome === null) {
+        // Neither appeared within the budget → genuine timeout (slow page / changed DOM).
+        throw Object.assign(
+          new Error(`Size grid not found within ${selectorTimeout}ms`),
+          { code: 'TIMEOUT' },
+        )
+      }
 
       // Nike's size grid uses a <div data-testid="pdp-grid-selector-item">
       // wrapper containing a hidden <input type="radio"> + visible <label>.
