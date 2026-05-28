@@ -57,28 +57,46 @@ export async function completePayment(
 			// Wait for payment section
 			await page.waitForSelector(selectors.checkout.paymentSection, { timeout: innerTimeout })
 
-			// Check for 3DS BEFORE clicking
+			// Check for 3DS BEFORE filling
 			const threeDSBefore = page.locator(selectors.checkout.threeDSIframe)
 			const is3DSBefore = await threeDSBefore.isVisible().catch(() => false)
 			if (is3DSBefore) {
 				throw Object.assign(new Error('3DS iframe detected before payment continue'), { code: '3DS_REQUIRED' })
 			}
 
-			// Card fields are usually inside an Adyen iframe — Nike tokenises card
-			// data via Adyen so the merchant page never sees PAN/CVV in plain DOM.
-			// We try the iframe scope first, then fall back to the page-level inputs
-			// in case Nike ever inlines the form.
-			const adyenFrame = page.frameLocator('iframe[src*="adyen"]').first()
-			let scope: Scope = adyenFrame
+			// Nike FR checkout is a single progressive page. The payment method is
+			// chosen via a radio (`paymentOptions` = creditDebit | paypal | …); the
+			// card form only renders once "creditDebit" is selected. Select it first.
+			const creditRadio = page
+				.locator('input[name="paymentOptions"][value="creditDebit"]')
+				.first()
+			if (await creditRadio.isVisible({ timeout: 1000 }).catch(() => false)) {
+				await creditRadio.check().catch(() => {})
+				// Give the card iframe a moment to mount.
+				await page.waitForSelector('iframe[src*="paymentcc.nike.com"]', { timeout: innerTimeout }).catch(() => {})
+			}
+
+			// Card fields live inside Nike's hosted PCI iframe — historically Adyen
+			// (iframe[src*="adyen"]), now paymentcc.nike.com ("Formulaire de carte de
+			// crédit"). Try the Nike host first, then Adyen, then inline page DOM.
+			let scope: Scope = page.frameLocator('iframe[src*="paymentcc.nike.com"]').first()
 			let cardNumberLoc = await findFirstVisibleIn(scope, [
-				'input[name="encryptedCardNumber"]',
+				'#creditCardNumber',
 				'input[name="cardNumber"]',
-				'input[aria-label*="arte"]',
 			])
+			if (!cardNumberLoc) {
+				scope = page.frameLocator('iframe[src*="adyen"]').first()
+				cardNumberLoc = await findFirstVisibleIn(scope, [
+					'input[name="encryptedCardNumber"]',
+					'input[name="cardNumber"]',
+					'input[aria-label*="arte"]',
+				])
+			}
 			if (!cardNumberLoc) {
 				// Iframe not present (or rotated) — fall back to the main page DOM.
 				scope = page
 				cardNumberLoc = await findFirstVisibleIn(scope, [
+					'#creditCardNumber',
 					'input[name="cardNumber"]',
 					'input[name="encryptedCardNumber"]',
 					'input[autocomplete="cc-number"]',
@@ -86,7 +104,6 @@ export async function completePayment(
 			}
 
 			// Detect empty card form: if the card-number input exists and is empty,
-			// or if no card-number input is found at all but we DO have card data,
 			// we should attempt to fill (caller's responsibility to provide opts.card).
 			const cardNumberValue = cardNumberLoc ? await cardNumberLoc.inputValue().catch(() => '') : ''
 			const cardFormEmpty = cardNumberLoc !== null && cardNumberValue.trim() === ''
@@ -111,6 +128,7 @@ export async function completePayment(
 				}
 
 				await fillIfPresentIn(scope, [
+					'#expirationDate',
 					'input[name="encryptedExpiryDate"]',
 					'input[name="expirationDate"]',
 					'input[name="expiry"]',
@@ -119,6 +137,7 @@ export async function completePayment(
 				], card.expiry)
 
 				await fillIfPresentIn(scope, [
+					'#cvNumber',
 					'input[name="encryptedSecurityCode"]',
 					'input[name="cvNumber"]',
 					'input[name="cvv"]',
@@ -126,7 +145,7 @@ export async function completePayment(
 					'input[aria-label*="ryptogramme"]',
 				], card.cvv)
 
-				// Holder name typically lives on the parent Nike page (not the Adyen iframe).
+				// Holder name typically lives on the parent Nike page (not the card iframe).
 				await fillIfPresentIn(page, [
 					'input[name="cardholderName"]',
 					'input[name="holderName"]',
@@ -135,27 +154,21 @@ export async function completePayment(
 				], card.holderName)
 			}
 
-			// Same pattern as completeShipping: use first() + waitFor instead of polling
-			// isVisible/isEnabled (which fail mid-render). Multiple submit buttons live
-			// on the page (Modifier, France selector, etc.) — first() narrows.
+			// Optional "continue / save card" button. Nike's single-page flow often
+			// has NO separate continue step — the only remaining action is the final
+			// "Passer la commande" submit, which submitOrder handles. So clicking the
+			// continue button is best-effort; its absence is NOT a failure.
 			const paymentButton = page.locator(selectors.checkout.paymentContinueButton).first()
-			try {
-				await paymentButton.waitFor({ state: 'visible', timeout: innerTimeout })
-			} catch {
-				throw Object.assign(new Error('Payment continue button not visible'), { code: 'TIMEOUT' })
+			if (await paymentButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+				await naturalClick(page, paymentButton)
 			}
 
-			await naturalClick(page, paymentButton)
-
-			// Check for 3DS AFTER clicking — Nike may redirect to 3DS after payment selection
+			// Check for 3DS AFTER filling — Nike may redirect to 3DS after payment selection
 			const threeDSAfter = page.locator(selectors.checkout.threeDSIframe)
 			const is3DSAfter = await threeDSAfter.isVisible().catch(() => false)
 			if (is3DSAfter) {
 				throw Object.assign(new Error('3DS iframe detected after payment continue'), { code: '3DS_REQUIRED' })
 			}
-
-			// Wait for submit order button to appear to confirm payment step done
-			await page.waitForSelector(selectors.checkout.submitOrderButton, { timeout: innerTimeout })
 
 			return cardFormEmpty ? 'payment-filled-and-complete' : 'payment-complete'
 		},

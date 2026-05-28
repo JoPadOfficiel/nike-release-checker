@@ -60,10 +60,41 @@ export async function completeShipping(
 	return executeStep(
 		'complete-shipping',
 		async () => {
-			// Wait for shipping continue button to be ready
 			// Use shorter timeout than the executeStep race timer to avoid ghost timeout
 			const innerTimeout = Math.max(Math.floor(timeoutMs * 0.6), 2000)
-			await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: innerTimeout })
+
+			// Shipping may ALREADY be complete: on a persistent profile Nike keeps
+			// the saved address and collapses the shipping section, jumping straight
+			// to payment. In that case the shipping continue button never appears.
+			// Race the shipping button against the payment section — if payment is
+			// already reachable and there's no shipping button, treat shipping as done.
+			// Cap this probe at 6s: the checkout page is already loaded by
+			// navigate-checkout, so the shipping button (if it's going to show)
+			// appears fast. This avoids burning the full timeout on every run where
+			// the address is already saved (payment shown directly).
+			const probeTimeout = Math.min(innerTimeout, 6000)
+			const shippingBtnReady = await page
+				.locator(selectors.checkout.shippingContinueButton)
+				.first()
+				.waitFor({ state: 'visible', timeout: probeTimeout })
+				.then(() => true)
+				.catch(() => false)
+
+			if (!shippingBtnReady) {
+				const paymentReachable = await findFirstVisible(page, [
+					'input[name="paymentOptions"]',
+					'iframe[src*="paymentcc.nike.com"]',
+					'iframe[src*="adyen"]',
+					'h2:has-text("Paiement")',
+				])
+				if (paymentReachable) {
+					return 'shipping-already-complete'
+				}
+				throw Object.assign(
+					new Error('Shipping continue button not visible and payment not reachable'),
+					{ code: 'TIMEOUT' },
+				)
+			}
 
 			// Detect whether the form is empty:
 			// - Nike shows a "Saisir l'adresse manuellement" toggle when no address pre-filled.

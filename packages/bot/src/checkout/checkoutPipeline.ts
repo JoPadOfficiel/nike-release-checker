@@ -119,11 +119,15 @@ async function safeCreateRealCheckoutContext(
 function resolvePipelineMode(config: BotConfig): 'dom' | 'hybrid' {
   const explicit = config.checkout?.pipeline
   if (explicit !== undefined) return explicit
-  // API-first by default. The hybrid pipeline carts + checks out entirely via
-  // Nike's API (KPSDK-signed), which is far more robust than scraping the DOM
-  // (Nike changes PDP/checkout selectors frequently). Set checkout.pipeline:
-  // 'dom' explicitly only for debugging the legacy DOM path.
-  return 'hybrid'
+  // DOM by default. The hybrid pipeline tries to cart via Nike's API directly,
+  // but those endpoints are KPSDK-protected: every request needs a fresh
+  // `x-kpsdk-cd` proof-of-work that only Kasada's obfuscated VM (p.js) can
+  // compute — captured tokens are rejected (403, verified live 2026-05-04).
+  // The DOM path drives the real browser, so Nike's own JS computes the PoW and
+  // signs every cart/checkout request natively. That's the only path that works
+  // without a paid Kasada solver. Set checkout.pipeline: 'hybrid' only if you
+  // wire a solver into the KPSDK client.
+  return 'dom'
 }
 
 export async function runCheckoutPipeline(

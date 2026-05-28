@@ -26,10 +26,21 @@ export async function navigateCheckout(
         throw Object.assign(new Error('Bot detection signal found'), { code: 'BLOCKED' })
       }
 
-      // Wait for shipping section to appear (confirms we are on checkout page)
-      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
+      // Confirm we're on the checkout page. Nike's checkout is a single
+      // progressive SPA whose section buttons ("Enregistrer et continuer",
+      // "Paiement"…) appear/disappear as sections expand — waiting for one
+      // specific submit button is flaky. Instead wait for ANY stable structural
+      // landmark that's always present once the checkout has hydrated: the order
+      // summary / delivery / payment headings, OR the shipping continue button.
       const innerTimeout = Math.max(Math.floor(timeoutMs * 0.6), 2000)
-      await page.waitForSelector(selectors.checkout.shippingContinueButton, { timeout: innerTimeout })
+      const landmark = [
+        selectors.checkout.shippingContinueButton,
+        'h2:has-text("Récapitulatif de la commande")',
+        'h2:has-text("Options de livraison")',
+        'h2:has-text("Paiement")',
+        'input[name="paymentOptions"]',
+      ].join(', ')
+      await page.waitForSelector(landmark, { timeout: innerTimeout, state: 'attached' })
 
       return 'checkout-page-reached'
     },
