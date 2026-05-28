@@ -16,6 +16,7 @@
 
 import type { SkusOutput, ProductFeedOutput } from '@nike-release-checker/sdk'
 import { skuCache } from './skuCache.ts'
+import { countryRegistry } from '../../country/registry.ts'
 
 // ---------------------------------------------------------------------------
 // Public API types
@@ -76,13 +77,23 @@ interface ProductFeedApiResponse {
  * Returns the raw objects array or throws on HTTP error.
  * This function is exported so tests can mock `fetchProductFeed` at the module level.
  */
+// Nike's default SNKRS/threads channel. The v3 feed REJECTS a query (HTTP 400
+// "Request validation failed") unless channelId is present alongside the
+// style-color filter. Verified live 2026-05-04.
+const DEFAULT_CHANNEL_ID = '010794e5-35fe-4e32-aaff-cd2c74f89d61'
+
 export async function fetchProductFeed(
 	marketplace: string,
 	styleColor: string,
+	language = 'en',
 ): Promise<ProductFeedOutput[]> {
 	const url = new URL('https://api.nike.com/product_feed/threads/v3/')
 	url.searchParams.append('filter', `marketplace(${marketplace})`)
-	url.searchParams.append('filter', `productCode(${styleColor})`)
+	url.searchParams.append('filter', `language(${language})`)
+	url.searchParams.append('filter', `channelId(${DEFAULT_CHANNEL_ID})`)
+	// v3 uses the dotted merch-product path; the old `productCode(...)` filter
+	// is invalid and 400s.
+	url.searchParams.append('filter', `productInfo.merchProduct.styleColor(${styleColor})`)
 
 	const res = await fetch(url.toString())
 	if (res.status === 404) {
@@ -176,10 +187,19 @@ export const resolveSkuId = async (args: ResolveArgs): Promise<string> => {
 	const cached = skuCache.get(country, args.styleColor, size)
 	if (cached !== undefined) return cached
 
+	// Resolve the marketplace language for the feed query (FR→fr, US→en, …).
+	// The v3 feed requires a language filter; default to 'en' for unknown codes.
+	let language = 'en'
+	try {
+		language = countryRegistry.get(country).languageCode
+	} catch {
+		// unknown country — keep 'en'
+	}
+
 	// Fetch from Nike Product Feed
 	let feedObjects: ProductFeedOutput[]
 	try {
-		feedObjects = await fetchProductFeed(country, args.styleColor)
+		feedObjects = await fetchProductFeed(country, args.styleColor, language)
 	} catch (err) {
 		const statusCode = (err as { statusCode?: number }).statusCode
 		if (statusCode === 404) {
