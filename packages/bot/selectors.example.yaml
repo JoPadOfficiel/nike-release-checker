@@ -104,7 +104,9 @@ cart:
 
 checkout:
   # ✓ Shipping continue — text-based since Nike checkout has no data-testid
-  shippingContinueButton: 'button[type="submit"]:text-matches("Paiement|Enregistrer et continuer|Continue", "i")'
+  # ✓ 2026-05-29: the shipping save CTA is button[data-attr="saveAddressBtn"]
+  # ("Enregistrer et continuer"). Kept text fallbacks for older layouts.
+  shippingContinueButton: 'button[data-attr="saveAddressBtn"], button[type="submit"]:text-matches("Paiement|Enregistrer et continuer|Continue", "i")'
   paymentSection: 'h2:has-text("Paiement"), [class*="payment-form"]'
   # ✓ Payment continue (optional in the single-page flow) — best-effort click
   # ✓ 2026-05-29: SNKRS launch checkout shows this between payment + order review.

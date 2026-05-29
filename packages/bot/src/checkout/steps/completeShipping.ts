@@ -162,21 +162,70 @@ async function addNewAddress(
 		await revealManualAddressFields(page)
 		await fillAddressForm(page, addr)
 
-		// Save the new address — Nike labels this "Enregistrer et continuer" /
-		// "Utiliser cette adresse" / the generic shipping continue button.
-		const saveBtn = await findFirstVisible(page, [
-			'button:has-text("Enregistrer et continuer")',
-			'button:has-text("Utiliser cette adresse")',
-			'button:has-text("Enregistrer")',
-			'button#saveAddressBtn',
+		await saveAddressForm(page, innerTimeout)
+		return true
+	} catch {
+		return false
+	}
+}
+
+/**
+ * Save the (now-filled) shipping address form. The button is
+ * `button[data-attr="saveAddressBtn"]` ("Enregistrer et continuer") — verified
+ * live 2026-05-29 on /fr/checkout. Falls back to text/submit. After saving,
+ * waits for the payment step to confirm shipping advanced.
+ */
+async function saveAddressForm(page: Page, innerTimeout: number): Promise<void> {
+	const saveBtn = await findFirstVisible(page, [
+		'button[data-attr="saveAddressBtn"]',
+		'button:has-text("Enregistrer et continuer")',
+		'button:has-text("Utiliser cette adresse")',
+		'button:has-text("Enregistrer")',
+	])
+	const btn = saveBtn ?? page.locator('button[type="submit"]').first()
+	await naturalClick(page, btn).catch(() => {})
+	// Confirm we advanced to payment (or at least the form closed).
+	await page.waitForSelector(
+		'input[name="paymentOptions"], iframe[src*="paymentcc.nike.com"], h2:has-text("Paiement")',
+		{ timeout: innerTimeout, state: 'attached' },
+	).catch(() => {})
+}
+
+/**
+ * Edit the EXISTING shipping address (the operator's preferred path when Nike's
+ * pre-selected address is wrong): click "Modifier" to open the editor, then
+ * overwrite every field with the CSV values and save. This is more reliable than
+ * adding a brand-new address because Nike keeps the edited address selected.
+ * Best-effort — returns true if the edit form opened and was saved.
+ */
+async function editExistingAddress(
+	page: Page,
+	addr: ShippingAddress,
+	innerTimeout: number,
+): Promise<boolean> {
+	try {
+		// "Modifier" / editButton reveals the editable address form. There can be
+		// several "Modifier" buttons (cart, billing) — prefer the shipping one.
+		const editBtn = await findFirstVisible(page, [
+			'#shipping button[data-attr="editButton"]',
+			'#shipping button:has-text("Modifier")',
+			'button[data-attr="editButton"]',
+			'button[aria-label="Modifier"]',
+			'button:has-text("Modifier")',
 		])
-		const btn = saveBtn ?? page.locator('button[type="submit"]').first()
-		await naturalClick(page, btn).catch(() => {})
-		// Confirm we advanced to payment (or at least the form closed).
-		await page.waitForSelector(
-			'input[name="paymentOptions"], iframe[src*="paymentcc.nike.com"], h2:has-text("Paiement")',
-			{ timeout: innerTimeout, state: 'attached' },
-		).catch(() => {})
+		if (!editBtn) return false
+		await naturalClick(page, editBtn)
+		// Wait for the editable fields to mount.
+		const ready = await page
+			.locator('input[name="address.address1"], input#address1')
+			.first()
+			.waitFor({ state: 'visible', timeout: innerTimeout })
+			.then(() => true)
+			.catch(() => false)
+		if (!ready) return false
+		await revealManualAddressFields(page)
+		await fillAddressForm(page, addr)
+		await saveAddressForm(page, innerTimeout)
 		return true
 	} catch {
 		return false
@@ -235,7 +284,11 @@ export async function completeShipping(
 					console.warn(
 						'[shipping] pre-selected address does not match the configured address — switching to the configured one',
 					)
-					const switched = await addNewAddress(page, opts.address!, innerTimeout)
+					// Prefer EDITING the existing address ("Modifier" → overwrite fields →
+					// save), the operator's intended flow. Fall back to adding a new address.
+					const switched =
+						(await editExistingAddress(page, opts.address!, innerTimeout)) ||
+						(await addNewAddress(page, opts.address!, innerTimeout))
 					if (switched) {
 						// Re-verify; if the target now shows, great. Otherwise fall back.
 						const after = await page.evaluate(() => document.body.innerText).catch(() => '')
