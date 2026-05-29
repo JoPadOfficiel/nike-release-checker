@@ -13,6 +13,7 @@ export type ReportRow = {
 	account_id: string
 	status: ReportStatus
 	sku: string
+	name?: string
 	size?: string
 	order_number?: string
 	timestamp: string
@@ -25,6 +26,7 @@ const HEADER = [
 	'account_id',
 	'status',
 	'sku',
+	'name',
 	'size',
 	'order_number',
 	'timestamp',
@@ -61,6 +63,7 @@ function buildCsvRow(row: ReportRow): string {
 		escapeCsvCell(row.account_id),
 		escapeCsvCell(row.status),
 		escapeCsvCell(row.sku),
+		escapeCsvCell(row.name),
 		escapeCsvCell(row.size),
 		escapeCsvCell(row.order_number),
 		escapeCsvCell(row.timestamp),

@@ -38,6 +38,16 @@ describe('toCheckoutResult', () => {
 		assert.equal(r.accountId, 'a1')
 		assert.equal(r.errorReason, undefined)
 		assert.equal(r.durationMs, 1234)
+		assert.equal(r.name, undefined) // no name passed
+	})
+
+	it('propagates the optional pair name to the report row', () => {
+		const r = toCheckoutResult(
+			mkResult({ steps: [sizeStep('42')], finalOutcome: 'success' }),
+			SKU,
+			'Kobe Mambacita',
+		)
+		assert.equal(r.name, 'Kobe Mambacita')
 	})
 
 	it('maps sold_out → SOLD_OUT and uses failed step details/error as errorReason', () => {

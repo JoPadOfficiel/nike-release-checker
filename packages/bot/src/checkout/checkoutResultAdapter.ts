@@ -44,6 +44,7 @@ function extractSize(details: string | undefined): string | undefined {
 export function toCheckoutResult(
 	p: CheckoutPipelineResult,
 	sku: string,
+	name?: string,
 ): CheckoutResult {
 	const status = OUTCOME_MAP[p.finalOutcome] ?? 'ERROR'
 
@@ -63,6 +64,7 @@ export function toCheckoutResult(
 		accountId: p.accountId,
 		status,
 		sku,
+		...(name ? { name } : {}),
 		...(size !== undefined ? { size } : {}),
 		// CheckoutPipelineResult doesn't currently surface order numbers; leave
 		// undefined — SummaryScreen tolerates missing values via optional fields.

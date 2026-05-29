@@ -14,6 +14,7 @@ export interface CheckoutResult {
 	accountId: string
 	status: ReportStatus
 	sku: string
+	name?: string // optional human-friendly pair name (from drop.csv)
 	size?: string
 	orderNumber?: string
 	errorReason?: string

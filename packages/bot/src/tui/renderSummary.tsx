@@ -18,6 +18,7 @@ function toReportRow(r: CheckoutResult, retryController?: RetryController) {
 		account_id: r.accountId,
 		status: r.status,
 		sku: r.sku,
+		name: r.name,
 		size: r.size,
 		order_number: r.orderNumber,
 		timestamp: new Date().toISOString(),

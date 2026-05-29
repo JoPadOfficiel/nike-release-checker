@@ -3,6 +3,81 @@ import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
 import { naturalClick } from '../naturalClick.ts'
 
+const THREE_DS_MESSAGE =
+  '⚠️ VALIDE LE 3-D SECURE — approuve le paiement sur ton app bancaire (Revolut/banque). Fenêtre courte !'
+
+/**
+ * Loudly alert the operator that the order is awaiting 3-D Secure approval.
+ * Nike/Adyen SCA on a real card almost always triggers 3DS — frequently
+ * OUT-OF-BAND (a push to the bank app, e.g. Revolut) with NO in-page challenge,
+ * and the approval window is short. We surface it on every channel we can:
+ * an in-page red blinking banner + audible beep + browser Notification (the
+ * Chrome window is on screen), a terminal bell, and a native macOS notification
+ * with sound (fires even if the terminal/browser isn't focused).
+ */
+async function notify3DS(page: Page): Promise<void> {
+  await page
+    .evaluate((msg) => {
+      try {
+        var id = 'nikebot-3ds-banner'
+        if (!document.getElementById(id)) {
+          var b = document.createElement('div')
+          b.id = id
+          b.textContent = msg
+          b.setAttribute(
+            'style',
+            'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#d50000;color:#fff;font:bold 18px/1.4 system-ui,sans-serif;padding:16px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.6)',
+          )
+          ;(document.body || document.documentElement).appendChild(b)
+          var on = 0
+          var t = setInterval(function () { b.style.background = on++ % 2 ? '#d50000' : '#ff8a80' }, 500)
+          setTimeout(function () { clearInterval(t) }, 30000)
+        }
+        try {
+          var Ac = (window as any).AudioContext || (window as any).webkitAudioContext
+          if (Ac) { var ac = new Ac(); var o = ac.createOscillator(); var g = ac.createGain(); o.connect(g); g.connect(ac.destination); o.type = 'square'; o.frequency.value = 880; g.gain.value = 0.2; o.start(); setTimeout(function () { o.stop(); if (ac.close) ac.close() }, 700) }
+        } catch (e) {}
+        try {
+          if ((window as any).Notification) {
+            var N = (window as any).Notification
+            if (N.permission === 'granted') new N('Nike Bot — 3-D Secure', { body: msg })
+            else if (N.permission !== 'denied') N.requestPermission().then(function (p: string) { if (p === 'granted') new N('Nike Bot — 3-D Secure', { body: msg }) })
+          }
+        } catch (e) {}
+      } catch (e) {}
+    }, THREE_DS_MESSAGE)
+    .catch(() => {})
+  try { process.stderr.write('\x07\n*** ' + THREE_DS_MESSAGE + ' ***\n') } catch {}
+  if (process.platform === 'darwin') {
+    try {
+      const { spawn } = await import('node:child_process')
+      spawn(
+        'osascript',
+        ['-e', 'display notification "Approuve le paiement sur ton app bancaire" with title "Nike Bot — 3-D Secure" sound name "Glass"'],
+        { stdio: 'ignore', detached: true },
+      ).unref()
+    } catch {}
+  }
+}
+
+/**
+ * Poll up to `ms` for the order to either confirm or land on an error page.
+ * Returns 'confirmed' | 'error' | 'pending'.
+ */
+async function checkOrderState(page: Page, confirmSelector: string, ms: number): Promise<'confirmed' | 'error' | 'pending'> {
+  const confirmed = await Promise.race([
+    page.waitForSelector(confirmSelector, { timeout: ms }).then(() => true).catch(() => false),
+    page.waitForURL(/\/(orders?|confirmation|order-confirmation|thank|merci)\b/i, { timeout: ms }).then(() => true).catch(() => false),
+  ])
+  if (confirmed) return 'confirmed'
+  const errored = await page
+    .locator('h1:has-text("Erreur"), h2:has-text("Erreur"), :text("paiement a été refusé"), :text("paiement a échoué"), :text("carte a été refusée")')
+    .first()
+    .isVisible()
+    .catch(() => false)
+  return errored ? 'error' : 'pending'
+}
+
 export async function submitOrder(
   page: Page,
   selectors: Selectors,
@@ -22,8 +97,11 @@ export async function submitOrder(
   return executeStep(
     'submit-order',
     async () => {
-      // Use shorter timeout than the executeStep race timer to avoid ghost timeout
-      const innerTimeout = Math.max(Math.floor(timeoutMs * 0.7), 2000)
+      // Button interactions (review-enable, submit-enable, quick confirm) use a
+      // SHORT bound capped at 25s. The final 3DS confirmation wait is much longer
+      // (see below) but lives inside the executeStep race timer, so callers must
+      // pass a generous `timeoutMs` for real runs (≈200s).
+      const innerTimeout = Math.min(Math.max(Math.floor(timeoutMs * 0.7), 2000), 25_000)
 
       // Nike's checkout has a progressive 2-stage finish (verified live 2026-05-29
       // on /fr/checkout). Stage 1: the payment step shows a button
@@ -100,9 +178,13 @@ export async function submitOrder(
 
       await naturalClick(page, submitButton)
 
-      // Confirm the order succeeded by EITHER the confirmation content OR a
-      // redirect to an order/confirmation URL (Nike sometimes routes to a
-      // separate confirmation page rather than swapping content in place).
+      // Confirm via EITHER the confirmation content OR a redirect to an
+      // order/confirmation URL ("Merci !"). On a real card, submitting almost
+      // always kicks off 3-D Secure (SCA) — usually OUT-OF-BAND (a push to the
+      // bank app, e.g. Revolut) with no in-page challenge. So: try a quick
+      // frictionless window first; if it doesn't land, ALERT the operator to
+      // approve 3DS on their phone and wait patiently (the approval window is
+      // short but the whole thing can take a couple of minutes).
       const confirmSelector = [
         selectors.checkout.orderConfirmation,
         'h1:has-text("Commande confirmée")',
@@ -111,15 +193,27 @@ export async function submitOrder(
         'h1:has-text(" commande est confirmée")',
         '[data-attr*="confirmation" i]',
       ].filter(Boolean).join(', ')
-      const confirmed = await Promise.race([
-        page.waitForSelector(confirmSelector, { timeout: innerTimeout }).then(() => true).catch(() => false),
-        page.waitForURL(/\/(orders?|confirmation|order-confirmation|thank|merci)\b/i, { timeout: innerTimeout }).then(() => true).catch(() => false),
-      ])
-      if (!confirmed) {
-        throw Object.assign(new Error('Order submitted but confirmation not detected'), { code: 'TIMEOUT' })
+
+      const quick = await checkOrderState(page, confirmSelector, Math.min(innerTimeout, 6000))
+      if (quick === 'confirmed') return 'order-submitted'
+      if (quick === 'error') {
+        throw Object.assign(new Error('payment error after submit (card declined / 3DS failed)'), { code: 'ERROR' })
       }
 
-      return 'order-submitted'
+      // Not frictionless → 3DS approval almost certainly required. Alert + wait.
+      await notify3DS(page).catch(() => {})
+      const deadline = Date.now() + Math.max(innerTimeout, 165_000)
+      while (Date.now() < deadline) {
+        const s = await checkOrderState(page, confirmSelector, 2500)
+        if (s === 'confirmed') return 'order-submitted-after-3ds'
+        if (s === 'error') {
+          throw Object.assign(new Error('payment error after 3DS (declined / not approved)'), { code: 'ERROR' })
+        }
+      }
+      throw Object.assign(
+        new Error('order submitted but not confirmed in time — 3DS not approved? (approve in your bank app, then retry)'),
+        { code: 'THREEDS_TIMEOUT' },
+      )
     },
     timeoutMs,
   )

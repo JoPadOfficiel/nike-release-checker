@@ -10,7 +10,9 @@ const CARDS_TEMPLATE = 'account_id,card_number,expiry,cvv,holder_name\n'
 
 const ADDRESSES_TEMPLATE = 'account_id,firstName,lastName,email,street,city,zip,country,phone\n'
 
-const DROP_TEMPLATE = 'sku,sizes,accounts_filter,country,name\n'
+// `name` sits right after `sku` (next to the SKU it labels) so it's intuitive to
+// fill. Parsing is by header, so column order is flexible — but keep this stable.
+const DROP_TEMPLATE = 'sku,name,sizes,accounts_filter,country\n'
 
 const INSTRUCTIONS = `Nike Bot — how to fill the CSV files
 ======================================
@@ -76,18 +78,18 @@ Example row:
 ----------------------------------------------------------------------
 drop.csv
 ----------------------------------------------------------------------
-Columns:
-  sku                Nike SKU / styleColor, e.g. IQ7604-101
+Columns (in order):
+  sku                Nike SKU / styleColor, e.g. IQ7604-101 — OR a full product URL
+  name               optional — a label for the pair so you recognise it in the
+                       dashboard + report (display only, never affects matching)
   sizes              sizes you want, separated by ";" (or use "," inside quotes)
                        e.g.  42;42.5;43    or    "42,42.5,43"
   accounts_filter    "all"   OR   ";"-separated account_ids   e.g. kev_001;kev_002
   country            optional ISO 2-letter code (default FR)
-  name               optional — a label for the pair so you recognise it
-                       (display only, never affects matching)
 
 Example rows:
-  IQ7604-101,42;42.5;43,all,FR,Travis Scott AJ1 Low
-  IQ3916-100,"42,43",kev_001,FR,Dunk Low Panda
+  IQ7604-101,Travis Scott AJ1 Low,42;42.5;43,all,FR
+  IQ3916-100,Kobe Mambacita,"42,43",kev_001,FR
 `
 
 export type TemplateKey = 'accounts' | 'cards' | 'addresses' | 'drop'

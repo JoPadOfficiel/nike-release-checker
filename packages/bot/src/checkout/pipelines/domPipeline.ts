@@ -170,7 +170,11 @@ export async function runDomPipeline(
 		accountId: account.id,
 		status: { kind: 'waiting', step: dryRun ? 'dryRun' : 'submitOrder' },
 	})
-	const submitResult = await submitOrder(page, selectors, dryRun, stepTimeoutMs)
+	// Real submits can sit in a 3-D Secure (SCA) wait for a couple of minutes
+	// while the operator approves on their bank app — give submitOrder a generous
+	// race window so executeStep doesn't kill it mid-3DS. Dry-run returns instantly.
+	const submitTimeoutMs = dryRun ? stepTimeoutMs : Math.max(stepTimeoutMs, 200_000)
+	const submitResult = await submitOrder(page, selectors, dryRun, submitTimeoutMs)
 	steps.push(submitResult)
 	logStep(account.email, submitResult)
 	printStepResult(submitResult)

@@ -30,7 +30,7 @@ test('escape edges: cell with comma, quote, newline round-trips', async () => {
 		const file = await writeReport(rows, dir)
 		const content = await readFile(file, 'utf8')
 		const lines = content.split('\n')
-		assert.equal(lines[0], 'account_id,status,sku,size,order_number,timestamp,error_reason,duration_ms,retry_attempt')
+		assert.equal(lines[0], 'account_id,status,sku,name,size,order_number,timestamp,error_reason,duration_ms,retry_attempt')
 		// Comma wrap
 		assert.ok(lines[1].includes('"acct,with,comma"'), 'comma cell must be quote-wrapped')
 		// Double-double-quote escape
@@ -176,7 +176,7 @@ test('appendToFile: new file then append 2 rows → header + original + 2 new, n
 		assert.equal(lines.length, 1 + 1 + 2, 'header + 1 original + 2 appended')
 		assert.equal(
 			lines[0],
-			'account_id,status,sku,size,order_number,timestamp,error_reason,duration_ms,retry_attempt',
+			'account_id,status,sku,name,size,order_number,timestamp,error_reason,duration_ms,retry_attempt',
 		)
 		// Ensure header appears exactly once.
 		const headerCount = (content.match(/^account_id,status,sku/gm) ?? []).length
@@ -199,7 +199,7 @@ test('empty rows produce header-only file with trailing newline', async () => {
 		const content = await readFile(file, 'utf8')
 		assert.equal(
 			content,
-			'account_id,status,sku,size,order_number,timestamp,error_reason,duration_ms,retry_attempt\n',
+			'account_id,status,sku,name,size,order_number,timestamp,error_reason,duration_ms,retry_attempt\n',
 		)
 		assert.ok(content.endsWith('\n'), 'POSIX trailing newline required')
 	} finally {

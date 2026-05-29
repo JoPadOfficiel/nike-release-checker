@@ -980,7 +980,7 @@ program
 									cards: cardByAccount,
 									addresses: addressByAccount,
 								})
-								const res = sum.results.map((pp) => toCheckoutResult(pp, a.drop.sku))
+								const res = sum.results.map((pp) => toCheckoutResult(pp, a.drop.sku, a.drop.name))
 								a.results.push(...res)
 								if (res.some((r) => r.status === 'COP')) { a.done = true; console.log(`[run] COP ! ${a.label}`) }
 								else if (!(res.length > 0 && res.every((r) => RETRYABLE.has(r.status)))) { a.done = true; console.log(`[run] ${a.label} - arret (${res.map((r) => r.status).join(', ')})`) }
@@ -1089,7 +1089,7 @@ program
 							await dashApp.waitUntilExit().catch(() => undefined)
 						}
 
-						return sum.results.map((p) => toCheckoutResult(p, drop.sku))
+						return sum.results.map((p) => toCheckoutResult(p, drop.sku, drop.name))
 					}
 
 					// 5. Initial run.
