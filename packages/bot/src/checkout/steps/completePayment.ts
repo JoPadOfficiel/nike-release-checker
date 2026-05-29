@@ -174,6 +174,34 @@ export async function completePayment(
 				)
 			}
 
+			// Fill all card fields. Re-resolves the paymentcc iframe each call because
+			// it can RE-MOUNT (e.g. right after a shipping-address change), which
+			// invalidates a previously-resolved locator and silently drops the values.
+			// Nike's masker reformats .fill() values (e.g. "4242…" → "4242 4242 …"),
+			// so strip spaces from the source first.
+			const fillCard = async (cardData: CardData): Promise<void> => {
+				let fillScope: Scope = page.frameLocator('iframe[src*="paymentcc.nike.com"]').first()
+				let numLoc = await waitForFirstVisibleIn(fillScope, NUMBER_SELS, 4000)
+				if (!numLoc) { fillScope = scope; numLoc = cardNumberLoc }
+				await numLoc?.fill(cardData.number.replace(/\s+/g, '')).catch(() => {})
+				await fillIfPresentIn(fillScope, [
+					'#expirationDate', 'input[name="encryptedExpiryDate"]', 'input[name="expirationDate"]',
+					'input[name="expiry"]', 'input[autocomplete="cc-exp"]', 'input[aria-label*="xpiration"]',
+				], normalizeExpiry(cardData.expiry))
+				await fillIfPresentIn(fillScope, [
+					'#cvNumber', 'input[name="encryptedSecurityCode"]', 'input[name="cvNumber"]',
+					'input[name="cvv"]', 'input[autocomplete="cc-csc"]', 'input[aria-label*="ryptogramme"]',
+				], cardData.cvv)
+				// Holder name lives on the parent page (not the iframe); Nike FR doesn't
+				// require it (billing = shipping). Best-effort.
+				await fillIfPresentIn(page, [
+					'input[name="cardholderName"]', 'input[name="holderName"]',
+					'input[autocomplete="cc-name"]', 'input[aria-label*="itulaire"]',
+				], cardData.holderName)
+				// Blur so Nike's React validation runs and enables the review button.
+				await page.keyboard.press('Tab').catch(() => {})
+			}
+
 			// Detect empty card form: if the card-number input is empty, fill it.
 			const cardNumberValue = await cardNumberLoc.inputValue().catch(() => '')
 			const cardFormEmpty = cardNumberValue.trim() === ''
@@ -185,47 +213,7 @@ export async function completePayment(
 						{ code: 'ERROR' },
 					)
 				}
-
-				const card = opts.card
-
-				// Nike's masker formats as you type; .fill() sets the raw value and the
-				// masker reformats it (verified: "4242424242424242" → "4242 4242 4242
-				// 4242"). Strip spaces from the source so the masker starts clean.
-				try {
-					await cardNumberLoc.fill(card.number.replace(/\s+/g, ''))
-				} catch {
-					// keep going — partial fill better than total fail
-				}
-
-				await fillIfPresentIn(scope, [
-					'#expirationDate',
-					'input[name="encryptedExpiryDate"]',
-					'input[name="expirationDate"]',
-					'input[name="expiry"]',
-					'input[autocomplete="cc-exp"]',
-					'input[aria-label*="xpiration"]',
-				], normalizeExpiry(card.expiry))
-
-				await fillIfPresentIn(scope, [
-					'#cvNumber',
-					'input[name="encryptedSecurityCode"]',
-					'input[name="cvNumber"]',
-					'input[name="cvv"]',
-					'input[autocomplete="cc-csc"]',
-					'input[aria-label*="ryptogramme"]',
-				], card.cvv)
-
-				// Holder name typically lives on the parent Nike page (not the card
-				// iframe) and Nike FR doesn't require it (billing = shipping). Best-effort.
-				await fillIfPresentIn(page, [
-					'input[name="cardholderName"]',
-					'input[name="holderName"]',
-					'input[autocomplete="cc-name"]',
-					'input[aria-label*="itulaire"]',
-				], card.holderName)
-
-				// Blur so Nike's React validation runs and enables the review button.
-				await page.keyboard.press('Tab').catch(() => {})
+				await fillCard(opts.card)
 			}
 
 			// Check for 3DS AFTER filling — Nike may redirect to 3DS after payment selection
@@ -238,18 +226,25 @@ export async function completePayment(
 			// Confirm Nike ACCEPTED the card: the "Continuer pour voir le récapitulatif"
 			// button (data-attr=continueToOrderReviewBtn) is aria-disabled="true" until
 			// number+expiry+cvv pass client validation, then flips enabled. This is the
-			// real success signal — a filled-but-invalid card leaves it disabled, and we
-			// must surface that here instead of letting submitOrder time out cryptically.
-			// (Don't click it — submitOrder owns the review→submit transition.)
+			// real success signal. If it stays disabled, RE-FILL once (the iframe may have
+			// re-mounted between resolve and fill — observed after an address switch) before
+			// failing. (Don't click it — submitOrder owns the review→submit transition.)
 			const reviewBtn = page.locator('[data-attr="continueToOrderReviewBtn"]').first()
 			const reviewBtnPresent = await reviewBtn.count().then((c) => c > 0).catch(() => false)
 			if (reviewBtnPresent) {
-				const deadline = Date.now() + innerTimeout
-				let accepted = false
-				while (Date.now() < deadline) {
-					const ariaDisabled = await reviewBtn.getAttribute('aria-disabled').catch(() => null)
-					if (ariaDisabled !== 'true') { accepted = true; break }
-					await page.waitForTimeout(300)
+				const waitEnable = async (ms: number): Promise<boolean> => {
+					const deadline = Date.now() + ms
+					while (Date.now() < deadline) {
+						if ((await reviewBtn.getAttribute('aria-disabled').catch(() => null)) !== 'true') return true
+						await page.waitForTimeout(300)
+					}
+					return false
+				}
+				let accepted = await waitEnable(Math.min(8000, innerTimeout))
+				if (!accepted && cardFormEmpty && opts.card) {
+					// Re-fill once — the iframe likely re-mounted and dropped the values.
+					await fillCard(opts.card)
+					accepted = await waitEnable(innerTimeout)
 				}
 				if (!accepted) {
 					throw Object.assign(

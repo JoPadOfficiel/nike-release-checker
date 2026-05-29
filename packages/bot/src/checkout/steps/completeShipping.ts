@@ -192,40 +192,95 @@ async function saveAddressForm(page: Page, innerTimeout: number): Promise<void> 
 }
 
 /**
- * Edit the EXISTING shipping address (the operator's preferred path when Nike's
- * pre-selected address is wrong): click "Modifier" to open the editor, then
- * overwrite every field with the CSV values and save. This is more reliable than
- * adding a brand-new address because Nike keeps the edited address selected.
- * Best-effort — returns true if the edit form opened and was saved.
+ * Read the SELECTED shipping address (the preview), not the whole page. Critical
+ * when the account has several saved addresses: document.body.innerText contains
+ * ALL of them (in the hidden address-book radios), so matching against body text
+ * would falsely "match" the target even when a different address is selected.
  */
-async function editExistingAddress(
+async function readAddressPreview(page: Page): Promise<string> {
+	return page
+		.evaluate(() => {
+			const p = document.querySelector('[data-attr="addressPreview"]')
+			if (p && (p.textContent ?? '').trim()) return p.textContent ?? ''
+			const parts = Array.from(document.querySelectorAll('[data-attr^="address-preview"]')).map(
+				(e) => e.textContent ?? '',
+			)
+			if (parts.length) return parts.join(' ')
+			return document.body.innerText
+		})
+		.catch(() => '')
+}
+
+/**
+ * Enforce the CSV address on a returning account. Nike keeps saved addresses as
+ * hidden radios `input[name="storedAddressList"]`, revealed by the shipping
+ * "Modifier" (editButton). EDITING/adding creates a NEW duplicate entry (verified
+ * live 2026-05-29), so the correct move is to SELECT the radio whose label matches
+ * the target (by zip + city), then confirm via "Passer au paiement"
+ * (continuePaymentBtn). Only when NO saved address matches do we add a new one
+ * (which becomes selected). Best-effort — returns true if a selection was made.
+ */
+async function selectSavedAddress(
 	page: Page,
 	addr: ShippingAddress,
 	innerTimeout: number,
 ): Promise<boolean> {
 	try {
-		// "Modifier" / editButton reveals the editable address form. There can be
-		// several "Modifier" buttons (cart, billing) — prefer the shipping one.
+		// Open the address book so the saved-address radios become interactable.
 		const editBtn = await findFirstVisible(page, [
 			'#shipping button[data-attr="editButton"]',
-			'#shipping button:has-text("Modifier")',
 			'button[data-attr="editButton"]',
-			'button[aria-label="Modifier"]',
-			'button:has-text("Modifier")',
+			'#shipping button:has-text("Modifier")',
 		])
-		if (!editBtn) return false
-		await naturalClick(page, editBtn)
-		// Wait for the editable fields to mount.
-		const ready = await page
-			.locator('input[name="address.address1"], input#address1')
-			.first()
-			.waitFor({ state: 'visible', timeout: innerTimeout })
-			.then(() => true)
-			.catch(() => false)
-		if (!ready) return false
-		await revealManualAddressFields(page)
-		await fillAddressForm(page, addr)
-		await saveAddressForm(page, innerTimeout)
+		if (editBtn) {
+			await naturalClick(page, editBtn)
+			await page.waitForTimeout(1200)
+		}
+
+		// Find the saved-address radio whose label matches the target (zip + city).
+		const zip = (addr.zip ?? '').toLowerCase().trim()
+		const city = (addr.city ?? '').toLowerCase().trim()
+		const matchId: string | null = await page.evaluate(
+			({ zip, city }) => {
+				const radios = Array.from(document.querySelectorAll('input[name="storedAddressList"]'))
+				for (const r of radios) {
+					const id = (r as HTMLInputElement).id
+					const lab = document.querySelector(`label[for="${id}"]`) ?? r.closest('label')
+					const t = (lab?.textContent ?? '').toLowerCase()
+					if (zip && city && t.includes(zip) && t.includes(city)) return id
+				}
+				return null
+			},
+			{ zip, city },
+		)
+
+		if (matchId) {
+			// The radio itself is visually hidden — click its label, then ensure checked.
+			await page.locator(`label[for="${matchId}"]`).first().click().catch(() => {})
+			await page.waitForTimeout(400)
+			await page.locator(`input[id="${matchId}"]`).check().catch(() => {})
+			await page.waitForTimeout(400)
+		} else {
+			// No saved address matches → add a new one (Nike auto-selects it).
+			const added = await addNewAddress(page, addr, innerTimeout)
+			if (!added) return false
+		}
+
+		// Confirm the selection → proceed to payment.
+		const cont = await findFirstVisible(page, [
+			'button[data-attr="continuePaymentBtn"]',
+			'button:has-text("Passer au paiement")',
+			'button[data-attr="saveAddressBtn"]',
+		])
+		if (cont) await naturalClick(page, cont)
+
+		// Wait for the payment step by its REAL controls (not the section header).
+		await page
+			.waitForSelector('input[name="paymentOptions"], iframe[src*="paymentcc.nike.com"]', {
+				timeout: innerTimeout,
+				state: 'visible',
+			})
+			.catch(() => {})
 		return true
 	} catch {
 		return false
@@ -260,44 +315,42 @@ export async function completeShipping(
 				.catch(() => false)
 
 			if (!shippingBtnReady) {
+				// Returning account: shipping is collapsed with a saved address selected.
+				// Detect payment by the REAL controls (paymentOptions radio / card iframe)
+				// — NOT an "h2:Paiement" header, which is ALWAYS present as the disabled
+				// step-2 title and gave a false "payment reachable".
+				const storedCount = await page.locator('input[name="storedAddressList"]').count().catch(() => 0)
 				const paymentReachable = await findFirstVisible(page, [
 					'input[name="paymentOptions"]',
 					'iframe[src*="paymentcc.nike.com"]',
 					'iframe[src*="adyen"]',
-					'h2:has-text("Paiement")',
 				])
-				if (!paymentReachable) {
+				if (!paymentReachable && storedCount === 0) {
 					throw Object.assign(
 						new Error('Shipping continue button not visible and payment not reachable'),
 						{ code: 'TIMEOUT' },
 					)
 				}
 
-				// Verify the pre-selected address is the one we WANT. Nike pre-selects
-				// a saved address on a returning account, which may not be the address
-				// configured for this drop. If it doesn't match, force ours.
+				// Enforce the CSV address. Read the SELECTED address (preview) — not the
+				// whole body, which contains every saved address in the hidden radio list.
 				if (target) {
-					const pageText = await page.evaluate(() => document.body.innerText).catch(() => '')
-					if (displayedAddressMatches(pageText, target)) {
-						return 'shipping-already-complete'
+					const previewText = await readAddressPreview(page)
+					if (displayedAddressMatches(previewText, target)) {
+						return 'shipping-already-correct-address'
 					}
 					console.warn(
-						'[shipping] pre-selected address does not match the configured address — switching to the configured one',
+						'[shipping] selected address does not match the configured one — selecting the matching saved address (or adding it)',
 					)
-					// Prefer EDITING the existing address ("Modifier" → overwrite fields →
-					// save), the operator's intended flow. Fall back to adding a new address.
-					const switched =
-						(await editExistingAddress(page, opts.address!, innerTimeout)) ||
-						(await addNewAddress(page, opts.address!, innerTimeout))
+					const switched = await selectSavedAddress(page, opts.address!, innerTimeout)
 					if (switched) {
-						// Re-verify; if the target now shows, great. Otherwise fall back.
-						const after = await page.evaluate(() => document.body.innerText).catch(() => '')
+						const after = await readAddressPreview(page)
 						return displayedAddressMatches(after, target)
-							? 'shipping-switched-to-configured-address'
-							: 'shipping-switch-attempted'
+							? 'shipping-selected-matching-address'
+							: 'shipping-select-attempted'
 					}
 					console.warn(
-						'[shipping] could not switch address — proceeding with Nike pre-selected address (FALLBACK, no crash)',
+						'[shipping] could not select/add the configured address — proceeding with Nike pre-selected address (FALLBACK, no crash)',
 					)
 					return 'shipping-address-mismatch-fallback'
 				}
