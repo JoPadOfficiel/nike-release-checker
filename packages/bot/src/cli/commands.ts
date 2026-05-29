@@ -892,33 +892,48 @@ program
 					}
 					console.log(`[run] ${addressByAccount.size} adresse(s) chargée(s) depuis ${opts.addressesCsv}`)
 				}
+				// Cards: read DIRECTLY from cards.csv (plaintext) — NO passphrase. This is the
+				// file the operator fills. The encrypted cards.db is a legacy fallback, used
+				// only when no cards.csv exists AND --unlock-cards is passed.
 				{
-					const { dbPath } = await import('../config/cardsStore.ts')
-					if (opts.unlockCards !== false && existsSync(dbPath())) {
-						const { promptPassphrase } = await import('./prompts.ts')
-						const { initWithPassphrase, getCard } = await import('../config/cardsStore.ts')
-						const passphrase = await promptPassphrase('Passphrase cards.db (Entrée = sans carte) : ')
-						if (passphrase.trim().length > 0) {
-							try {
-								const { key } = await initWithPassphrase(passphrase)
-								for (const a of stored) {
-									const row = getCard(a.id, key)
-									if (!row) continue
-									cardByAccount.set(a.id, { number: row.card_number, expiry: row.expiry, cvv: row.cvv, holderName: row.holder_name })
-									const existing = addressByAccount.get(a.id)
-									if (existing && row.holder_name && !existing.firstName) {
-										const parts = row.holder_name.trim().split(/\s+/)
-										existing.firstName = parts[0]
-										existing.lastName = parts.slice(1).join(' ') || parts[0]
+					const cardsCsvPath = configDefault('cards.csv')
+					if (existsSync(cardsCsvPath)) {
+						try {
+							const raw = (await import('node:fs')).readFileSync(cardsCsvPath, 'utf8')
+							const rows = raw.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+							if (rows.length > 1) {
+								const header = rows[0]!.split(',').map((h) => h.trim())
+								const col = (k: string) => header.indexOf(k)
+								for (let i = 1; i < rows.length; i++) {
+									const cells = rows[i]!.split(',')
+									const get = (k: string) => (cells[col(k)] ?? '').trim()
+									const id = get('account_id'); const number = get('card_number')
+									if (!id || !number) continue
+									const holder = get('holder_name')
+									cardByAccount.set(id, { number, expiry: get('expiry'), cvv: get('cvv'), holderName: holder })
+									const existing = addressByAccount.get(id)
+									if (existing && holder && !existing.firstName) {
+										const parts = holder.split(/\s+/); existing.firstName = parts[0]; existing.lastName = parts.slice(1).join(' ') || parts[0]
 									}
 								}
-								console.log(`[run] ${cardByAccount.size} carte(s) déverrouillée(s)`)
-							} catch (e) {
-								console.error(`❌ Déverrouillage cards.db échoué : ${maskCredentials(String(e))}`)
-								process.exit(1)
 							}
-						} else {
-							console.log('[run] Pas de passphrase — paiement non disponible (test taille/panier/expédition seulement)')
+							console.log(`[run] ${cardByAccount.size} carte(s) chargée(s) depuis ${cardsCsvPath}`)
+						} catch (e) {
+							console.error(`⚠️  Lecture cards.csv échouée : ${maskCredentials(String(e))}`)
+						}
+					} else if (opts.unlockCards !== false) {
+						const { dbPath } = await import('../config/cardsStore.ts')
+						if (existsSync(dbPath())) {
+							const { promptPassphrase } = await import('./prompts.ts')
+							const { initWithPassphrase, getCard } = await import('../config/cardsStore.ts')
+							const passphrase = await promptPassphrase('Passphrase cards.db (Entrée = sans carte) : ')
+							if (passphrase.trim().length > 0) {
+								try {
+									const { key } = await initWithPassphrase(passphrase)
+									for (const a of stored) { const row = getCard(a.id, key); if (row) cardByAccount.set(a.id, { number: row.card_number, expiry: row.expiry, cvv: row.cvv, holderName: row.holder_name }) }
+									console.log(`[run] ${cardByAccount.size} carte(s) déverrouillée(s)`)
+								} catch (e) { console.error(`❌ Déverrouillage cards.db échoué : ${maskCredentials(String(e))}`); process.exit(1) }
+							}
 						}
 					}
 				}
