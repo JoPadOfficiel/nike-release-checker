@@ -782,6 +782,8 @@ program
 	.option('--selectors <path>', 'Path to selectors YAML', configDefault('selectors.yaml'))
 	.option('--dry-run', 'Run pipeline without submitting orders', false)
 	.option('--wait-live <seconds>', 'Keep re-attempting a not-yet-live drop until it goes live (drop-day arming). 0 = single pass.', '0')
+		.option('--addresses-csv <path>', 'Path to addresses.csv', configDefault('addresses.csv'))
+		.option('--no-unlock-cards', 'Skip unlocking cards.db (size/cart/shipping only, no real payment)')
 	.action(
 		async (opts: {
 			drops: string
@@ -789,6 +791,8 @@ program
 			selectors: string
 			dryRun?: boolean
 			waitLive?: string
+			addressesCsv: string
+			unlockCards?: boolean
 		}) => {
 			const { maskCredentials } = await import('../logger/credentialMasker.ts')
 			const { parseAccountsCsv } = await import('../config/accountsCsv.ts')
@@ -865,6 +869,134 @@ program
 
 				const config = await loadBotConfig(configPath)
 
+				// 3.5 Load per-account shipping addresses + payment cards so the pipeline
+				// can actually PAY (and so dry-run can TEST payment). Addresses need no
+				// secret; cards.db is encrypted → prompt the passphrase ONCE here, before
+				// the dashboard takes over the terminal.
+				const { existsSync } = await import('node:fs')
+				const addressByAccount = new Map<string, { street: string; city: string; zip: string; country: string; phone?: string; email?: string; firstName?: string; lastName?: string }>()
+				const cardByAccount = new Map<string, { number: string; expiry: string; cvv: string; holderName: string }>()
+				if (existsSync(opts.addressesCsv)) {
+					const { parseAddressesCsv } = await import('../config/addressesCsv.ts')
+					const knownIds = new Set(stored.map((a) => a.id))
+					const accCountries = new Map(stored.map((a) => [a.id, a.country]))
+					const parsed = await parseAddressesCsv(opts.addressesCsv, knownIds, accCountries)
+					if (parsed.errors.length > 0) {
+						console.error(`❌ addresses.csv : ${parsed.errors.length} erreur(s)`)
+						for (const e of parsed.errors) console.error(`  row ${e.row} [${e.column}]: ${e.message}`)
+						process.exit(1)
+					}
+					for (const a of stored) {
+						const addr = parsed.byAccountId.get(a.id)
+						if (addr) addressByAccount.set(a.id, { street: addr.street, city: addr.city, zip: addr.zip, country: addr.country, phone: addr.phone, email: a.email })
+					}
+					console.log(`[run] ${addressByAccount.size} adresse(s) chargée(s) depuis ${opts.addressesCsv}`)
+				}
+				{
+					const { dbPath } = await import('../config/cardsStore.ts')
+					if (opts.unlockCards !== false && existsSync(dbPath())) {
+						const { promptPassphrase } = await import('./prompts.ts')
+						const { initWithPassphrase, getCard } = await import('../config/cardsStore.ts')
+						const passphrase = await promptPassphrase('Passphrase cards.db (Entrée = sans carte) : ')
+						if (passphrase.trim().length > 0) {
+							try {
+								const { key } = await initWithPassphrase(passphrase)
+								for (const a of stored) {
+									const row = getCard(a.id, key)
+									if (!row) continue
+									cardByAccount.set(a.id, { number: row.card_number, expiry: row.expiry, cvv: row.cvv, holderName: row.holder_name })
+									const existing = addressByAccount.get(a.id)
+									if (existing && row.holder_name && !existing.firstName) {
+										const parts = row.holder_name.trim().split(/\s+/)
+										existing.firstName = parts[0]
+										existing.lastName = parts.slice(1).join(' ') || parts[0]
+									}
+								}
+								console.log(`[run] ${cardByAccount.size} carte(s) déverrouillée(s)`)
+							} catch (e) {
+								console.error(`❌ Déverrouillage cards.db échoué : ${maskCredentials(String(e))}`)
+								process.exit(1)
+							}
+						} else {
+							console.log('[run] Pas de passphrase — paiement non disponible (test taille/panier/expédition seulement)')
+						}
+					}
+				}
+
+				// 3.9 ARMED + MULTIPLE pairs -> arm them ALL in parallel (user request:
+				// "en armer plusieurs en parallele, les preparer"). Each round, every
+				// not-yet-done pair is resolved + checked out CONCURRENTLY (Promise.all),
+				// so the bot no longer blocks on pair #1 waiting for it to go live. A pair
+				// leaves the rotation on COP or a hard stop; the rest keep cycling until the
+				// deadline. No live TUI here (N dashboards would fight over the terminal) -
+				// concise logs + a per-pair summary at the end. Single-pair and dry-run keep
+				// the interactive Dashboard below.
+				const waitLiveSecTop = Number.parseInt(opts.waitLive ?? '0', 10)
+				const armedMulti = !dryRun && waitLiveSecTop > 0 && !Number.isNaN(waitLiveSecTop) && dropParse.drops.length > 1
+				if (armedMulti) {
+					const deadline = Date.now() + waitLiveSecTop * 1000
+					const startedAt = new Date()
+					type Armed = { drop: (typeof dropParse.drops)[number]; accounts: typeof stored; label: string; rc: InstanceType<typeof RetryController>; done: boolean; results: CheckoutResult[] }
+					const armed: Armed[] = []
+					for (const drop of dropParse.drops) {
+						const ids = resolveAccountsFilter(drop.accountsFilter, allIds, validSessionIds)
+						if (ids.length === 0) { console.log(`[run] ${drop.sku} ignore - aucun compte apres filtre.`); continue }
+						const accs = ids.map((i) => storedById.get(i)).filter((a): a is NonNullable<typeof a> => a !== undefined)
+						armed.push({ drop, accounts: accs, label: drop.name ? `${drop.name} (${drop.sku})` : drop.sku, rc: new RetryController(), done: false, results: [] })
+					}
+					if (armed.length === 0) { console.log('Aucun drop exploitable.'); return }
+					console.log(`[run] Armement de ${armed.length} paires EN PARALLELE (jusqu'a ${waitLiveSecTop}s). Chaque round = un essai concurrent par paire.`)
+					const RETRYABLE = new Set(['SOLD_OUT', 'ERROR', 'THREEDS_TIMEOUT'])
+					const resolveUrl = async (drop: (typeof dropParse.drops)[number]): Promise<{ productUrl: string; slug: string; styleColor: string } | null> => {
+						if (/^https?:\/\//i.test(drop.sku)) {
+							const sc = /\/([A-Z0-9]{2,8}-[0-9]{2,4})(?:[/?#]|$)/i.exec(drop.sku)?.[1] ?? ''
+							return { productUrl: drop.sku, slug: '', styleColor: sc }
+						}
+						const c = new AbortController()
+						const t = setTimeout(() => c.abort(), 8000)
+						try { return await resolveSkuToSlug(drop.sku, config, c.signal, 3000) }
+						catch { return null }
+						finally { clearTimeout(t) }
+					}
+					let round = 0
+					while (Date.now() < deadline) {
+						const pending = armed.filter((a) => !a.done)
+						if (pending.length === 0) break
+						round++
+						const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000))
+						console.log(`[run] -- round ${round} : ${pending.length} paire(s) active(s), ${remaining}s restantes --`)
+						await Promise.all(pending.map(async (a) => {
+							const resolved = await resolveUrl(a.drop)
+							if (!resolved) { console.log(`[run] ${a.label} - pas encore dans le feed Nike`); return }
+							try {
+								const sum = await runParallelCheckout({
+									productUrl: resolved.productUrl,
+									targetSizes: a.drop.sizes,
+									dryRun: false,
+									configPath,
+									selectorsPath: opts.selectors,
+									accounts: a.accounts,
+									retryController: a.rc,
+									cards: cardByAccount,
+									addresses: addressByAccount,
+								})
+								const res = sum.results.map((pp) => toCheckoutResult(pp, a.drop.sku))
+								a.results.push(...res)
+								if (res.some((r) => r.status === 'COP')) { a.done = true; console.log(`[run] COP ! ${a.label}`) }
+								else if (!(res.length > 0 && res.every((r) => RETRYABLE.has(r.status)))) { a.done = true; console.log(`[run] ${a.label} - arret (${res.map((r) => r.status).join(', ')})`) }
+							} catch (e) { console.error(`[run] ${a.label} - erreur: ${maskCredentials(String(e))}`) }
+						}))
+						if (armed.every((a) => a.done)) break
+						await new Promise((r) => setTimeout(r, 5000))
+					}
+					for (const a of armed) {
+						console.log(`[run] Recapitulatif ${a.label} :`)
+						await renderSummary(a.results, startedAt, { retryController: a.rc, retryHandler: async () => {} }).catch(() => undefined)
+					}
+					return
+				}
+				
+				
 				// 4. For each drop row → run pipeline + render Dashboard live
 				for (const drop of dropParse.drops) {
 					const accountIds = resolveAccountsFilter(
@@ -949,6 +1081,8 @@ program
 								selectorsPath: opts.selectors,
 								accounts: runAccounts,
 								retryController,
+								cards: cardByAccount,
+								addresses: addressByAccount,
 							})
 						} finally {
 							dashApp.unmount()

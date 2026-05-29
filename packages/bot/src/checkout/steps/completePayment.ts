@@ -1,7 +1,6 @@
 import type { Page, Locator, FrameLocator } from 'playwright'
 import type { Selectors } from '../../config/selectorSchema.ts'
 import { executeStep, type StepResult } from '../executeStep.ts'
-import { naturalClick } from '../naturalClick.ts'
 import { displayedCardMatches } from './cardMatcher.ts'
 
 export interface CardData {
@@ -42,6 +41,36 @@ async function fillIfPresentIn(scope: Scope, candidates: string[], value: string
 	} catch {
 		return false
 	}
+}
+
+/**
+ * Like findFirstVisibleIn but polls up to `timeoutMs` for ANY candidate to
+ * become visible. Nike's hosted card iframe (paymentcc.nike.com) mounts a beat
+ * AFTER the "Carte de paiement" radio is checked; a one-shot 250ms probe races
+ * that mount and falsely concludes "no card form" → a silent fake success. This
+ * waits deterministically instead.
+ */
+async function waitForFirstVisibleIn(scope: Scope, candidates: string[], timeoutMs: number): Promise<Locator | null> {
+	const deadline = Date.now() + timeoutMs
+	for (;;) {
+		const loc = await findFirstVisibleIn(scope, candidates)
+		if (loc) return loc
+		if (Date.now() >= deadline) return null
+		// Sleep between polls so a not-yet-mounted iframe doesn't busy-spin the CPU.
+		await new Promise((r) => setTimeout(r, 150))
+	}
+}
+
+/**
+ * Normalize an expiry to the MM/YY shape Nike's "MM/AA" field expects.
+ * Accepts "12/30", "12/2030", "1230", "122030" → "12/30".
+ */
+export function normalizeExpiry(raw: string): string {
+	const digits = raw.replace(/\D/g, '')
+	if (digits.length < 4) return raw // leave as-is; field will reject if wrong
+	const mm = digits.slice(0, 2)
+	const yy = digits.length >= 6 ? digits.slice(4, 6) : digits.slice(2, 4)
+	return `${mm}/${yy}`
 }
 
 export async function completePayment(
@@ -109,36 +138,45 @@ export async function completePayment(
 			}
 
 			// Card fields live inside Nike's hosted PCI iframe — historically Adyen
-			// (iframe[src*="adyen"]), now paymentcc.nike.com ("Formulaire de carte de
-			// crédit"). Try the Nike host first, then Adyen, then inline page DOM.
-			let scope: Scope = page.frameLocator('iframe[src*="paymentcc.nike.com"]').first()
-			let cardNumberLoc = await findFirstVisibleIn(scope, [
+			// (iframe[src*="adyen"]), now paymentcc.nike.com. Verified live 2026-05-29:
+			// fields are #creditCardNumber, #expirationDate ("MM/AA"), #cvNumber.
+			// Wait DETERMINISTICALLY for the number field (the iframe mounts a beat
+			// after the radio is checked) rather than a 250ms probe that races it.
+			const NUMBER_SELS = [
 				'#creditCardNumber',
 				'input[name="cardNumber"]',
-			])
+				'input[name="encryptedCardNumber"]',
+				'input[autocomplete="cc-number"]',
+			]
+			let scope: Scope = page.frameLocator('iframe[src*="paymentcc.nike.com"]').first()
+			let cardNumberLoc = await waitForFirstVisibleIn(scope, NUMBER_SELS, innerTimeout)
 			if (!cardNumberLoc) {
 				scope = page.frameLocator('iframe[src*="adyen"]').first()
-				cardNumberLoc = await findFirstVisibleIn(scope, [
+				cardNumberLoc = await waitForFirstVisibleIn(scope, [
 					'input[name="encryptedCardNumber"]',
 					'input[name="cardNumber"]',
 					'input[aria-label*="arte"]',
-				])
+				], 2500)
 			}
 			if (!cardNumberLoc) {
 				// Iframe not present (or rotated) — fall back to the main page DOM.
 				scope = page
-				cardNumberLoc = await findFirstVisibleIn(scope, [
-					'#creditCardNumber',
-					'input[name="cardNumber"]',
-					'input[name="encryptedCardNumber"]',
-					'input[autocomplete="cc-number"]',
-				])
+				cardNumberLoc = await findFirstVisibleIn(scope, NUMBER_SELS)
 			}
 
-			// Detect empty card form: if the card-number input exists and is empty,
-			// we should attempt to fill (caller's responsibility to provide opts.card).
-			const cardNumberValue = cardNumberLoc ? await cardNumberLoc.inputValue().catch(() => '') : ''
-			const cardFormEmpty = cardNumberLoc !== null && cardNumberValue.trim() === ''
+			if (!cardNumberLoc) {
+				// No new-card form, and (since a matching saved card already returned
+				// above) no usable saved card either. FAIL LOUDLY — never report a
+				// silent success with no card entered, which left submitOrder hanging.
+				throw Object.assign(
+					new Error('payment card field not found (card iframe did not mount)'),
+					{ code: 'ERROR' },
+				)
+			}
+
+			// Detect empty card form: if the card-number input is empty, fill it.
+			const cardNumberValue = await cardNumberLoc.inputValue().catch(() => '')
+			const cardFormEmpty = cardNumberValue.trim() === ''
 
 			if (cardFormEmpty) {
 				if (!opts.card) {
@@ -150,13 +188,13 @@ export async function completePayment(
 
 				const card = opts.card
 
-				// Card number — fill into whichever scope (iframe vs page) we resolved.
-				if (cardNumberLoc) {
-					try {
-						await cardNumberLoc.fill(card.number)
-					} catch {
-						// keep going — partial fill better than total fail
-					}
+				// Nike's masker formats as you type; .fill() sets the raw value and the
+				// masker reformats it (verified: "4242424242424242" → "4242 4242 4242
+				// 4242"). Strip spaces from the source so the masker starts clean.
+				try {
+					await cardNumberLoc.fill(card.number.replace(/\s+/g, ''))
+				} catch {
+					// keep going — partial fill better than total fail
 				}
 
 				await fillIfPresentIn(scope, [
@@ -166,7 +204,7 @@ export async function completePayment(
 					'input[name="expiry"]',
 					'input[autocomplete="cc-exp"]',
 					'input[aria-label*="xpiration"]',
-				], card.expiry)
+				], normalizeExpiry(card.expiry))
 
 				await fillIfPresentIn(scope, [
 					'#cvNumber',
@@ -177,22 +215,17 @@ export async function completePayment(
 					'input[aria-label*="ryptogramme"]',
 				], card.cvv)
 
-				// Holder name typically lives on the parent Nike page (not the card iframe).
+				// Holder name typically lives on the parent Nike page (not the card
+				// iframe) and Nike FR doesn't require it (billing = shipping). Best-effort.
 				await fillIfPresentIn(page, [
 					'input[name="cardholderName"]',
 					'input[name="holderName"]',
 					'input[autocomplete="cc-name"]',
 					'input[aria-label*="itulaire"]',
 				], card.holderName)
-			}
 
-			// Optional "continue / save card" button. Nike's single-page flow often
-			// has NO separate continue step — the only remaining action is the final
-			// "Passer la commande" submit, which submitOrder handles. So clicking the
-			// continue button is best-effort; its absence is NOT a failure.
-			const paymentButton = page.locator(selectors.checkout.paymentContinueButton).first()
-			if (await paymentButton.isVisible({ timeout: 1500 }).catch(() => false)) {
-				await naturalClick(page, paymentButton)
+				// Blur so Nike's React validation runs and enables the review button.
+				await page.keyboard.press('Tab').catch(() => {})
 			}
 
 			// Check for 3DS AFTER filling — Nike may redirect to 3DS after payment selection
@@ -200,6 +233,30 @@ export async function completePayment(
 			const is3DSAfter = await threeDSAfter.isVisible().catch(() => false)
 			if (is3DSAfter) {
 				throw Object.assign(new Error('3DS iframe detected after payment continue'), { code: '3DS_REQUIRED' })
+			}
+
+			// Confirm Nike ACCEPTED the card: the "Continuer pour voir le récapitulatif"
+			// button (data-attr=continueToOrderReviewBtn) is aria-disabled="true" until
+			// number+expiry+cvv pass client validation, then flips enabled. This is the
+			// real success signal — a filled-but-invalid card leaves it disabled, and we
+			// must surface that here instead of letting submitOrder time out cryptically.
+			// (Don't click it — submitOrder owns the review→submit transition.)
+			const reviewBtn = page.locator('[data-attr="continueToOrderReviewBtn"]').first()
+			const reviewBtnPresent = await reviewBtn.count().then((c) => c > 0).catch(() => false)
+			if (reviewBtnPresent) {
+				const deadline = Date.now() + innerTimeout
+				let accepted = false
+				while (Date.now() < deadline) {
+					const ariaDisabled = await reviewBtn.getAttribute('aria-disabled').catch(() => null)
+					if (ariaDisabled !== 'true') { accepted = true; break }
+					await page.waitForTimeout(300)
+				}
+				if (!accepted) {
+					throw Object.assign(
+						new Error('card entered but Nike did not accept it (review button stayed disabled — invalid/declined card?)'),
+						{ code: 'ERROR' },
+					)
+				}
 			}
 
 			return cardFormEmpty ? 'payment-filled-and-complete' : 'payment-complete'

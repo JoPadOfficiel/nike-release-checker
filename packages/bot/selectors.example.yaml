@@ -107,10 +107,14 @@ checkout:
   shippingContinueButton: 'button[type="submit"]:text-matches("Paiement|Enregistrer et continuer|Continue", "i")'
   paymentSection: 'h2:has-text("Paiement"), [class*="payment-form"]'
   # ✓ Payment continue (optional in the single-page flow) — best-effort click
-  paymentContinueButton: 'button[type="submit"]:has-text("Continuer")'
+  # ✓ 2026-05-29: SNKRS launch checkout shows this between payment + order review.
+  # It is aria-disabled until the card passes client validation, then enables.
+  paymentContinueButton: '[data-attr="continueToOrderReviewBtn"], button:has-text("Continuer pour voir le récapitulatif"), button[type="submit"]:has-text("Continuer")'
   threeDSIframe: 'iframe[src*="acs"], iframe[src*="3ds"], iframe[name*="threeDSIframe"]'
   # ✓ Submit order — final "Passer la commande" on the order-summary step
-  submitOrderButton: 'button:has-text("Passer la commande"), button:has-text("Payer maintenant"), button[type="submit"]:has-text("Acheter"), button[type="submit"]:text-matches("Passer la commande|Acheter|Payer", "i"), [aria-label*="Passer la commande" i]'
+  # ✓ 2026-05-29: on SNKRS launches the final CTA is "Soumettre le paiement"
+  # (NOT "Passer la commande"). Keep both — submitOrder also appends fallbacks.
+  submitOrderButton: 'button:has-text("Soumettre le paiement"), button:has-text("Passer la commande"), button:has-text("Payer maintenant"), button[type="submit"]:has-text("Acheter"), button[type="submit"]:text-matches("Soumettre le paiement|Passer la commande|Acheter|Payer", "i"), [aria-label*="Passer la commande" i]'
   orderConfirmation: 'h1:has-text("Commande confirmée"), h1:has-text("Merci"), h2:has-text("Commande confirmée"), h1:has-text("Merci pour ta commande"), [data-testid*="confirmation" i]'
 
 # ========== COOKIE CONSENT ==========

@@ -4,6 +4,8 @@ import { loadSelectors } from '../config/selectors.ts'
 import { maskEmail } from '../logger/credentialMasker.ts'
 import { printCheckoutSummary } from '../logger/terminal.ts'
 import { runCheckoutPipeline, type CheckoutPipelineResult } from './checkoutPipeline.ts'
+import type { CardData } from './steps/completePayment.ts'
+import type { ShippingAddress } from './steps/completeShipping.ts'
 import type { AccountConfig } from '../config/accountSchema.ts'
 import { globalBus, type AccountStatus } from '../tui/eventBus.ts'
 import type { FinalOutcome } from './outcomeClassifier.ts'
@@ -34,6 +36,17 @@ export interface ParallelCheckoutOptions {
    * lookup so the retry loop can apply per-account rotation policy.
    */
   proxyResolver?: (acc: AccountConfig) => string | null
+  /**
+   * Per-account payment card (accountId → card). Threaded to completePayment so
+   * the order can actually be paid. Without it the payment step has nothing to
+   * fill and fails. Built by the CLI after unlocking cards.db.
+   */
+  cards?: Map<string, CardData>
+  /**
+   * Per-account shipping address (accountId → address). Used by completeShipping
+   * to verify / switch the address. Built by the CLI from addresses.csv.
+   */
+  addresses?: Map<string, ShippingAddress>
 }
 
 export interface ParallelCheckoutSummary {
@@ -98,13 +111,17 @@ export async function runParallelCheckout(
 
   // MUST use Promise.allSettled — never Promise.all
   const settled = await Promise.allSettled(
-    accounts.map((account) =>
-      runCheckoutPipeline(account, config, selectors, {
+    accounts.map((account) => {
+      const card = options.cards?.get(account.id)
+      const shippingAddress = options.addresses?.get(account.id)
+      return runCheckoutPipeline(account, config, selectors, {
         productUrl,
         targetSizes,
         dryRun,
-      }),
-    ),
+        ...(card ? { card } : {}),
+        ...(shippingAddress ? { shippingAddress } : {}),
+      })
+    }),
   )
 
   const results: CheckoutPipelineResult[] = []

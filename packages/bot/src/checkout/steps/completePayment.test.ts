@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { completePayment } from './completePayment.ts'
+import { completePayment, normalizeExpiry } from './completePayment.ts'
 import type { Selectors } from '../../config/selectorSchema.ts'
 
 const selectors = {
@@ -16,6 +16,7 @@ interface FakeLocator {
 	visible: boolean
 	enabled: boolean
 	value: string
+	ariaDisabled: string | null
 	fillCalls: string[]
 	clickCalls: number
 	first: () => FakeLocator
@@ -27,13 +28,16 @@ interface FakeLocator {
 	evaluate: (fn: unknown) => Promise<void>
 	waitFor: () => Promise<void>
 	boundingBox: () => Promise<null>
+	count: () => Promise<number>
+	getAttribute: (name: string) => Promise<string | null>
 }
 
-function makeLocator(opts: { visible?: boolean; enabled?: boolean; value?: string } = {}): FakeLocator {
+function makeLocator(opts: { visible?: boolean; enabled?: boolean; value?: string; ariaDisabled?: string | null } = {}): FakeLocator {
 	const loc: FakeLocator = {
 		visible: opts.visible ?? true,
 		enabled: opts.enabled ?? true,
 		value: opts.value ?? '',
+		ariaDisabled: opts.ariaDisabled ?? null,
 		fillCalls: [],
 		clickCalls: 0,
 		first(): FakeLocator { return loc },
@@ -45,14 +49,21 @@ function makeLocator(opts: { visible?: boolean; enabled?: boolean; value?: strin
 		async evaluate(): Promise<void> { loc.clickCalls++ },
 		async waitFor(): Promise<void> { /* noop */ },
 		async boundingBox(): Promise<null> { return null },
+		async count(): Promise<number> { return loc.visible ? 1 : 0 },
+		async getAttribute(_name: string): Promise<string | null> { return loc.ariaDisabled },
 	}
 	return loc
 }
 
-function makePage(locators: Record<string, FakeLocator>) {
+/**
+ * `pageLocators` are looked up on page.locator(); `iframeLocators` are looked up
+ * inside the paymentcc.nike.com frame (frameLocator(...).locator(...)). This
+ * mirrors the real flow where the card fields live in Nike's hosted PCI iframe.
+ */
+function makePage(pageLocators: Record<string, FakeLocator>, iframeLocators: Record<string, FakeLocator> = {}) {
 	return {
 		locator(sel: string) {
-			const found = locators[sel]
+			const found = pageLocators[sel]
 			if (found) return found
 			return makeLocator({ visible: false })
 		},
@@ -65,50 +76,57 @@ function makePage(locators: Record<string, FakeLocator>) {
 			async move(): Promise<void> { /* noop */ },
 			async wheel(): Promise<void> { /* noop */ },
 		},
-		frameLocator(_sel: string) {
-			// No Adyen iframe present in tests — return a frame whose locators are
-			// all invisible so the implementation falls back to the page DOM.
+		frameLocator(sel: string) {
+			// Only the paymentcc.nike.com frame holds card fields in these tests;
+			// the adyen frame returns invisible so the impl moves on quickly.
+			const map = sel.includes('paymentcc') ? iframeLocators : {}
 			return {
-				locator(_s: string) { return makeLocator({ visible: false }) },
+				locator(s: string) { return map[s] ?? makeLocator({ visible: false }) },
 				first() { return this },
 			}
 		},
 	}
 }
 
-test('completePayment: clicks continue when card form is pre-filled', async () => {
-	const continueBtn = makeLocator({ visible: true, enabled: true })
-	// Card number input visible AND populated → form NOT empty.
-	const cardNumber = makeLocator({ visible: true, value: '4242424242424242' })
-	const page = makePage({
-		'button.payment-continue': continueBtn,
-		'input[name="cardNumber"]': cardNumber,
-	})
+test('completePayment: success when card form is pre-filled (no continue click — submitOrder owns that)', async () => {
+	// Card number lives in the iframe, already populated → form NOT empty.
+	const cardNumber = makeLocator({ visible: true, value: '4242 4242 4242 4242' })
+	// Review button present and ENABLED (Nike accepted the card).
+	const reviewBtn = makeLocator({ visible: true, ariaDisabled: 'false' })
+	const page = makePage(
+		{ '[data-attr="continueToOrderReviewBtn"]': reviewBtn },
+		{ '#creditCardNumber': cardNumber },
+	)
 
-	const result = await completePayment(page as never, selectors, { timeoutMs: 1000 })
+	const result = await completePayment(page as never, selectors, { timeoutMs: 2000 })
 	assert.equal(result.outcome, 'success')
 	assert.equal(result.details, 'payment-complete')
-	assert.equal(continueBtn.clickCalls, 1)
 	assert.deepEqual(cardNumber.fillCalls, [])
+	// completePayment must NOT click the review/continue button — that's submitOrder.
+	assert.equal(reviewBtn.clickCalls, 0)
 })
 
 test('completePayment: fills empty card form using opts.card', async () => {
-	const continueBtn = makeLocator({ visible: true, enabled: true })
 	const cardNumber = makeLocator({ visible: true, value: '' })
 	const expiry = makeLocator({ visible: true })
 	const cvv = makeLocator({ visible: true })
 	const holder = makeLocator({ visible: true })
+	const reviewBtn = makeLocator({ visible: true, ariaDisabled: 'false' })
 
-	const page = makePage({
-		'button.payment-continue': continueBtn,
-		'input[name="cardNumber"]': cardNumber,
-		'input[name="expirationDate"]': expiry,
-		'input[name="cvNumber"]': cvv,
-		'input[name="cardholderName"]': holder,
-	})
+	const page = makePage(
+		{
+			'input[name="cardholderName"]': holder,
+			'[data-attr="continueToOrderReviewBtn"]': reviewBtn,
+		},
+		{
+			'#creditCardNumber': cardNumber,
+			'#expirationDate': expiry,
+			'#cvNumber': cvv,
+		},
+	)
 
 	const result = await completePayment(page as never, selectors, {
-		timeoutMs: 1000,
+		timeoutMs: 2000,
 		card: {
 			number: '4111111111111111',
 			expiry: '12/27',
@@ -123,20 +141,20 @@ test('completePayment: fills empty card form using opts.card', async () => {
 	assert.deepEqual(expiry.fillCalls, ['12/27'])
 	assert.deepEqual(cvv.fillCalls, ['123'])
 	assert.deepEqual(holder.fillCalls, ['CANDID AUDIO'])
-	assert.equal(continueBtn.clickCalls, 1)
 })
 
 test('completePayment: errors when card form is empty and no card provided', async () => {
-	const continueBtn = makeLocator({ visible: true, enabled: true })
 	const cardNumber = makeLocator({ visible: true, value: '' })
+	const page = makePage({}, { '#creditCardNumber': cardNumber })
 
-	const page = makePage({
-		'button.payment-continue': continueBtn,
-		'input[name="cardNumber"]': cardNumber,
-	})
-
-	const result = await completePayment(page as never, selectors, { timeoutMs: 1000 })
+	const result = await completePayment(page as never, selectors, { timeoutMs: 2000 })
 	assert.equal(result.outcome, 'error')
 	assert.match(result.error ?? '', /payment form empty/)
-	assert.equal(continueBtn.clickCalls, 0)
+})
+
+test('normalizeExpiry: accepts MM/YY, MM/YYYY, MMYY, MMYYYY', () => {
+	assert.equal(normalizeExpiry('12/30'), '12/30')
+	assert.equal(normalizeExpiry('12/2030'), '12/30')
+	assert.equal(normalizeExpiry('1230'), '12/30')
+	assert.equal(normalizeExpiry('122030'), '12/30')
 })
