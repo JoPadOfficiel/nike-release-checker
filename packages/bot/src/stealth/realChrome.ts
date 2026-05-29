@@ -150,12 +150,23 @@ const COOKIE_NUKE_INIT_SCRIPT = String.raw`
   'use strict';
   try {
     function nukeCookieModal() {
+      // SCOPED to the COOKIE modal only. The previous version removed EVERY
+      // [data-testid="modal-backdrop"] on every DOM mutation — but Nike reuses
+      // that same backdrop testid for the PAYMENT / 3DS / order-review modals.
+      // Blanket-removing it tore those down at checkout: focus-trap crashed
+      // ("must have at least one tabbable node"), the Adyen 3DS action never
+      // mounted, and the order hung on an infinite spinner. So: do NOTHING
+      // unless the cookie modal is actually on the page, then remove only its
+      // own nodes. Verified live 2026-05-29.
+      var cookieModal = document.querySelector('[data-testid="cookie-modal"]');
+      var cookieRoot = document.querySelector('[data-testid="cookie-modal-root"]');
+      if (!cookieModal && !cookieRoot) return;
+      if (cookieRoot && cookieRoot.parentElement) cookieRoot.parentElement.removeChild(cookieRoot);
+      var wrapper = cookieModal && cookieModal.closest ? cookieModal.closest('.modal-portal-content-wrapper') : null;
+      if (wrapper && wrapper.parentElement) wrapper.parentElement.removeChild(wrapper);
+      // Remove the backdrop only now that we've confirmed a cookie modal exists.
       var backdrop = document.querySelector('[data-testid="modal-backdrop"]');
       if (backdrop && backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
-      var root = document.querySelector('[data-testid="cookie-modal-root"]');
-      if (root && root.parentElement) root.parentElement.removeChild(root);
-      var wrapper = document.querySelector('.modal-portal-content-wrapper');
-      if (wrapper && wrapper.parentElement && wrapper.querySelector('[data-testid="cookie-modal"]')) wrapper.parentElement.removeChild(wrapper);
     }
     nukeCookieModal();
     var obs = new MutationObserver(function () { nukeCookieModal(); });
@@ -324,12 +335,23 @@ const FULL_STEALTH_INIT_SCRIPT = String.raw`
 
     // ----- Nike cookie consent modal nuke -----
     function nukeCookieModal() {
+      // SCOPED to the COOKIE modal only. The previous version removed EVERY
+      // [data-testid="modal-backdrop"] on every DOM mutation — but Nike reuses
+      // that same backdrop testid for the PAYMENT / 3DS / order-review modals.
+      // Blanket-removing it tore those down at checkout: focus-trap crashed
+      // ("must have at least one tabbable node"), the Adyen 3DS action never
+      // mounted, and the order hung on an infinite spinner. So: do NOTHING
+      // unless the cookie modal is actually on the page, then remove only its
+      // own nodes. Verified live 2026-05-29.
+      var cookieModal = document.querySelector('[data-testid="cookie-modal"]');
+      var cookieRoot = document.querySelector('[data-testid="cookie-modal-root"]');
+      if (!cookieModal && !cookieRoot) return;
+      if (cookieRoot && cookieRoot.parentElement) cookieRoot.parentElement.removeChild(cookieRoot);
+      var wrapper = cookieModal && cookieModal.closest ? cookieModal.closest('.modal-portal-content-wrapper') : null;
+      if (wrapper && wrapper.parentElement) wrapper.parentElement.removeChild(wrapper);
+      // Remove the backdrop only now that we've confirmed a cookie modal exists.
       var backdrop = document.querySelector('[data-testid="modal-backdrop"]');
       if (backdrop && backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
-      var root = document.querySelector('[data-testid="cookie-modal-root"]');
-      if (root && root.parentElement) root.parentElement.removeChild(root);
-      var wrapper = document.querySelector('.modal-portal-content-wrapper');
-      if (wrapper && wrapper.parentElement && wrapper.querySelector('[data-testid="cookie-modal"]')) wrapper.parentElement.removeChild(wrapper);
     }
     nukeCookieModal();
     var obs = new MutationObserver(function () { nukeCookieModal(); });
