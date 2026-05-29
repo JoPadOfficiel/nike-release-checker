@@ -172,6 +172,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundleShortVersionString</key><string>$VERSION</string>
 	<key>CFBundlePackageType</key>     <string>APPL</string>
 	<key>CFBundleExecutable</key>      <string>nike-bot</string>
+	<key>CFBundleIconFile</key>        <string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>  <string>11.0</string>
 	<key>NSHighResolutionCapable</key> <true/>
 </dict>

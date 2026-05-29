@@ -96,11 +96,30 @@ cd /d "%NIKE_BOT_HOME%"
 endlocal
 '@ | Set-Content -Encoding ASCII (Join-Path $Out 'Nike Bot.cmd')
 
+# Icon + desktop-style shortcut. A .cmd can't carry an icon, so we bundle the
+# .ico and create a "Nike Bot.lnk" shortcut that points at the .cmd with the icon
+# attached — that's what the user double-clicks. Drop your own build\windows\icon.ico
+# (see build\make-icons.sh) to rebrand.
+$IcoSrc = Join-Path $Root 'build\windows\icon.ico'
+if (Test-Path $IcoSrc) {
+	Copy-Item $IcoSrc (Join-Path $Out 'icon.ico')
+	try {
+		$ws = New-Object -ComObject WScript.Shell
+		$lnk = $ws.CreateShortcut((Join-Path $Out 'Nike Bot.lnk'))
+		$lnk.TargetPath = '%ComSpec%'
+		$lnk.Arguments  = '/c ""%~dp0Nike Bot.cmd""'
+		$lnk.WorkingDirectory = '%~dp0'
+		$lnk.IconLocation = (Join-Path $Out 'icon.ico') + ',0'
+		$lnk.Description = 'Nike Bot'
+		$lnk.Save()
+	} catch { Write-Host "  (shortcut creation skipped: $_)" }
+}
+
 @"
 Nike Bot $Version (windows-x64)
 
 Run:
-  Double-click "Nike Bot.cmd"
+  Double-click "Nike Bot.lnk"  (has the icon)   — or "Nike Bot.cmd"
 
 This launches the interactive setup wizard. Self-contained — no Node, no npm,
 no Playwright install needed.
