@@ -1,5 +1,12 @@
 # @nike-release-checker/cli
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [239cc4d]
+  - @nike-release-checker/sdk@1.0.1
+
 ## 1.0.0
 
 ### Major Changes

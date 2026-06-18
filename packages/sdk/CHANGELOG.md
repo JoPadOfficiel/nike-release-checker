@@ -1,5 +1,11 @@
 # @nike-release-checker/sdk
 
+## 1.0.1
+
+### Patch Changes
+
+- 239cc4d: Add `"em"` (italic) to `MarkTypeSchema` union to handle Nike product feed responses that include emphasis marks in rich text content
+
 ## 1.0.0
 
 ### Major Changes
