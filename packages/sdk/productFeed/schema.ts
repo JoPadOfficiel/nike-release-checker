@@ -558,6 +558,7 @@ export const MarkTypeSchema = v.union([
 	v.literal('link'),
 	v.literal('underline'),
 	v.literal('strong'),
+	v.literal('em'),
 ])
 
 export const MarkSchema = v.object({
