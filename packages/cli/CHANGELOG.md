@@ -1,5 +1,54 @@
 # @nike-release-checker/cli
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [a9199de]
+  - @nike-release-checker/sdk@1.0.2
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [239cc4d]
+  - @nike-release-checker/sdk@1.0.1
+
+## 1.0.0
+
+### Major Changes
+
+- 03b832d: Stable release ⭐️
+
+### Patch Changes
+
+- Updated dependencies [03b832d]
+  - @nike-release-checker/sdk@1.0.0
+
+## 0.4.1
+
+### Patch Changes
+
+- 3bae643: Upgrade image rendering to `ink-picture@2`, cache product images in memory, and simplify SEA builds by removing sharp native asset packaging.
+
+  The CLI now passes fetched image bytes directly to `ink-picture`, bundles dynamic imports into the main Rspack output, and emits a single `bundle.cjs` for SEA packaging.
+
+## 0.4.0
+
+### Minor Changes
+
+- 56e3bec: Migrate SEA build pipeline to Node.js 26
+  - Upgrade Node.js baseline from 24.x to 26.3.0
+  - Replace manual `postject` injection pipeline with built-in `node --build-sea`; removes the `postject` devDependency, the intermediate blob file, and the Node binary copy step
+  - Add `mainFormat: "commonjs"` to SEA config to make CJS mode explicit and resilient to future Node defaults changes
+  - Drop `--experimental-webstorage` flag from all scripts — Web Storage is enabled by default since Node 25.0.0
+  - Add `engines.node: ">=26.3"` to packages
+
+### Patch Changes
+
+- Updated dependencies [56e3bec]
+  - @nike-release-checker/sdk@0.6.0
+
 ## 0.3.9
 
 ### Patch Changes

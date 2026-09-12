@@ -1,5 +1,34 @@
 # @nike-release-checker/sdk
 
+## 1.0.2
+
+### Patch Changes
+
+- a9199de: Support video-variant `coverCard` properties in `ProductFeedSchema` to handle Nike product feed responses (e.g. NL) where the cover card is a video card with `startImage`, `videoId`, `manifestURL`, and a differently-shaped `portrait`, instead of the previously assumed image-only card shape
+
+## 1.0.1
+
+### Patch Changes
+
+- 239cc4d: Add `"em"` (italic) to `MarkTypeSchema` union to handle Nike product feed responses that include emphasis marks in rich text content
+
+## 1.0.0
+
+### Major Changes
+
+- 03b832d: Stable release ⭐️
+
+## 0.6.0
+
+### Minor Changes
+
+- 56e3bec: Migrate SEA build pipeline to Node.js 26
+  - Upgrade Node.js baseline from 24.x to 26.3.0
+  - Replace manual `postject` injection pipeline with built-in `node --build-sea`; removes the `postject` devDependency, the intermediate blob file, and the Node binary copy step
+  - Add `mainFormat: "commonjs"` to SEA config to make CJS mode explicit and resilient to future Node defaults changes
+  - Drop `--experimental-webstorage` flag from all scripts — Web Storage is enabled by default since Node 25.0.0
+  - Add `engines.node: ">=26.3"` to packages
+
 ## 0.5.0
 
 ### Minor Changes
