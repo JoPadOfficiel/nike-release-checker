@@ -1,15 +1,16 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
 await build({
-	entryPoints: ['src/cli/index.ts'],
+	entryPoints: [fileURLToPath(new URL('../src/cli/index.ts', import.meta.url))],
 	bundle: true,
 	platform: 'node',
-	target: 'node24',
+	target: 'node26',
 	format: 'cjs',
-	outfile: 'dist/nike-bot.bundle.js',
+	outfile: fileURLToPath(new URL('../dist/nike-bot.bundle.js', import.meta.url)),
 	define: {
 		__BOT_VERSION__: JSON.stringify(pkg.version),
 	},
@@ -17,6 +18,8 @@ await build({
 		'playwright',
 		'playwright-extra',
 		'playwright-core',
+		'patchright',
+		'patchright-core',
 		'rebrowser-playwright',
 		'better-sqlite3',
 		// ink/yoga-layout use top-level await + ESM; react-devtools-core is optional.

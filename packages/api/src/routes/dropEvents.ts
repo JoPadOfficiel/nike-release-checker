@@ -102,7 +102,7 @@ async function _dropEventsRoute(app: FastifyInstance): Promise<void> {
             resolve(null)
           }, 1_000)
 
-          socket.once('message', (raw) => {
+          socket.once('message', (raw: { toString(): string }) => {
             clearTimeout(timer)
             try {
               const msg: unknown = JSON.parse(raw.toString())
