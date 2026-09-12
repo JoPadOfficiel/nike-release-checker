@@ -80,7 +80,7 @@ export async function selectSize(
       ])
       if (outcome === 'unavailable') {
         throw Object.assign(
-          new Error('Produit pas encore en vente (bouton Prévenir / sold out) — passage au suivant'),
+          new Error('Product not yet live (Notify me / sold out button) — skipping to next'),
           { code: 'SOLD_OUT' },
         )
       }

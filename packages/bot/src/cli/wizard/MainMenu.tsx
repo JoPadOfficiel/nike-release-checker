@@ -54,11 +54,11 @@ export function MainMenu({ items, onSelect, accountCount, dropCount }: MainMenuP
 	return (
 		<Box flexDirection='column' padding={1}>
 			<Text color='magenta' bold>
-				Nike Bot — Accueil
+				Nike Bot — Home
 			</Text>
 			<Text color='gray'>
-				{accountCount ?? 0} compte(s) configuré(s)
-				{typeof dropCount === 'number' ? ` · ${dropCount} drop(s) dans drop.csv` : ''}
+				{accountCount ?? 0} configured account(s)
+				{typeof dropCount === 'number' ? ` · ${dropCount} drop(s) in drop.csv` : ''}
 			</Text>
 			<Box marginTop={1} flexDirection='column'>
 				{items.map((it, i) => {
@@ -75,7 +75,7 @@ export function MainMenu({ items, onSelect, accountCount, dropCount }: MainMenuP
 				})}
 			</Box>
 			<Box marginTop={1}>
-				<Text color='gray'>↑/↓ ou 1–{items.length} pour choisir · Entrée pour valider · q pour quitter</Text>
+				<Text color='gray'>↑/↓ or 1–{items.length} to select · Enter to confirm · q to quit</Text>
 			</Box>
 		</Box>
 	)

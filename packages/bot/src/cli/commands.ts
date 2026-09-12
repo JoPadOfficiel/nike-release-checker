@@ -852,10 +852,10 @@ program
 				// No active drops → tell the user how to add one instead of exiting silently.
 				if (dropParse.drops.length === 0) {
 					console.log('')
-					console.log(`Aucun drop actif dans ${opts.drops}.`)
-					console.log('Ajoute une ligne (sans #) au format : sku,sizes,accounts_filter')
-					console.log('Exemple : IQ7604-101,"40;41",all')
-					console.log('Puis relance.')
+					console.log(`No active drops in ${opts.drops}.`)
+					console.log('Add a line (without #) in format: sku,sizes,accounts_filter')
+					console.log('Example: IQ7604-101,"40;41",all')
+					console.log('Then restart.')
 					return
 				}
 
@@ -882,7 +882,7 @@ program
 					const accCountries = new Map(stored.map((a) => [a.id, a.country]))
 					const parsed = await parseAddressesCsv(opts.addressesCsv, knownIds, accCountries)
 					if (parsed.errors.length > 0) {
-						console.error(`❌ addresses.csv : ${parsed.errors.length} erreur(s)`)
+						console.error(`❌ addresses.csv: ${parsed.errors.length} error(s)`)
 						for (const e of parsed.errors) console.error(`  row ${e.row} [${e.column}]: ${e.message}`)
 						process.exit(1)
 					}
@@ -890,7 +890,7 @@ program
 						const addr = parsed.byAccountId.get(a.id)
 						if (addr) addressByAccount.set(a.id, { street: addr.street, city: addr.city, zip: addr.zip, country: addr.country, phone: addr.phone, email: a.email })
 					}
-					console.log(`[run] ${addressByAccount.size} adresse(s) chargée(s) depuis ${opts.addressesCsv}`)
+					console.log(`[run] ${addressByAccount.size} address(es) loaded from ${opts.addressesCsv}`)
 				}
 				// Cards: read DIRECTLY from cards.csv (plaintext) — NO passphrase. This is the
 				// file the operator fills. The encrypted cards.db is a legacy fallback, used
@@ -917,22 +917,22 @@ program
 									}
 								}
 							}
-							console.log(`[run] ${cardByAccount.size} carte(s) chargée(s) depuis ${cardsCsvPath}`)
+							console.log(`[run] ${cardByAccount.size} card(s) loaded from ${cardsCsvPath}`)
 						} catch (e) {
-							console.error(`⚠️  Lecture cards.csv échouée : ${maskCredentials(String(e))}`)
+							console.error(`⚠️  Failed to read cards.csv: ${maskCredentials(String(e))}`)
 						}
 					} else if (opts.unlockCards !== false) {
 						const { dbPath } = await import('../config/cardsStore.ts')
 						if (existsSync(dbPath())) {
 							const { promptPassphrase } = await import('./prompts.ts')
 							const { initWithPassphrase, getCard } = await import('../config/cardsStore.ts')
-							const passphrase = await promptPassphrase('Passphrase cards.db (Entrée = sans carte) : ')
+							const passphrase = await promptPassphrase('Passphrase cards.db (Enter = no card): ')
 							if (passphrase.trim().length > 0) {
 								try {
 									const { key } = await initWithPassphrase(passphrase)
 									for (const a of stored) { const row = getCard(a.id, key); if (row) cardByAccount.set(a.id, { number: row.card_number, expiry: row.expiry, cvv: row.cvv, holderName: row.holder_name }) }
-									console.log(`[run] ${cardByAccount.size} carte(s) déverrouillée(s)`)
-								} catch (e) { console.error(`❌ Déverrouillage cards.db échoué : ${maskCredentials(String(e))}`); process.exit(1) }
+									console.log(`[run] ${cardByAccount.size} card(s) unlocked`)
+								} catch (e) { console.error(`❌ Failed to unlock cards.db: ${maskCredentials(String(e))}`); process.exit(1) }
 							}
 						}
 					}
@@ -955,12 +955,12 @@ program
 					const armed: Armed[] = []
 					for (const drop of dropParse.drops) {
 						const ids = resolveAccountsFilter(drop.accountsFilter, allIds, validSessionIds)
-						if (ids.length === 0) { console.log(`[run] ${drop.sku} ignore - aucun compte apres filtre.`); continue }
+						if (ids.length === 0) { console.log(`[run] ${drop.sku} skipped — no accounts after filter.`); continue }
 						const accs = ids.map((i) => storedById.get(i)).filter((a): a is NonNullable<typeof a> => a !== undefined)
 						armed.push({ drop, accounts: accs, label: drop.name ? `${drop.name} (${drop.sku})` : drop.sku, rc: new RetryController(), done: false, results: [] })
 					}
-					if (armed.length === 0) { console.log('Aucun drop exploitable.'); return }
-					console.log(`[run] Armement de ${armed.length} paires EN PARALLELE (jusqu'a ${waitLiveSecTop}s). Chaque round = un essai concurrent par paire.`)
+					if (armed.length === 0) { console.log('No actionable drops found.'); return }
+					console.log(`[run] Arming ${armed.length} pairs IN PARALLEL (up to ${waitLiveSecTop}s). Each round = one concurrent attempt per pair.`)
 					const RETRYABLE = new Set(['SOLD_OUT', 'ERROR', 'THREEDS_TIMEOUT'])
 					const resolveUrl = async (drop: (typeof dropParse.drops)[number]): Promise<{ productUrl: string; slug: string; styleColor: string } | null> => {
 						if (/^https?:\/\//i.test(drop.sku)) {
@@ -979,10 +979,10 @@ program
 						if (pending.length === 0) break
 						round++
 						const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000))
-						console.log(`[run] -- round ${round} : ${pending.length} paire(s) active(s), ${remaining}s restantes --`)
+						console.log(`[run] -- round ${round}: ${pending.length} active pair(s), ${remaining}s remaining --`)
 						await Promise.all(pending.map(async (a) => {
 							const resolved = await resolveUrl(a.drop)
-							if (!resolved) { console.log(`[run] ${a.label} - pas encore dans le feed Nike`); return }
+							if (!resolved) { console.log(`[run] ${a.label} — not yet in Nike feed`); return }
 							try {
 								const sum = await runParallelCheckout({
 									productUrl: resolved.productUrl,
@@ -997,15 +997,15 @@ program
 								})
 								const res = sum.results.map((pp) => toCheckoutResult(pp, a.drop.sku, a.drop.name))
 								a.results.push(...res)
-								if (res.some((r) => r.status === 'COP')) { a.done = true; console.log(`[run] COP ! ${a.label}`) }
-								else if (!(res.length > 0 && res.every((r) => RETRYABLE.has(r.status)))) { a.done = true; console.log(`[run] ${a.label} - arret (${res.map((r) => r.status).join(', ')})`) }
-							} catch (e) { console.error(`[run] ${a.label} - erreur: ${maskCredentials(String(e))}`) }
+								if (res.some((r) => r.status === 'COP')) { a.done = true; console.log(`[run] COP! ${a.label}`) }
+								else if (!(res.length > 0 && res.every((r) => RETRYABLE.has(r.status)))) { a.done = true; console.log(`[run] ${a.label} — stopped (${res.map((r) => r.status).join(', ')})`) }
+							} catch (e) { console.error(`[run] ${a.label} — error: ${maskCredentials(String(e))}`) }
 						}))
 						if (armed.every((a) => a.done)) break
 						await new Promise((r) => setTimeout(r, 5000))
 					}
 					for (const a of armed) {
-						console.log(`[run] Recapitulatif ${a.label} :`)
+						console.log(`[run] Summary ${a.label}:`)
 						await renderSummary(a.results, startedAt, { retryController: a.rc, retryHandler: async () => {} }).catch(() => undefined)
 					}
 					return
@@ -1040,7 +1040,7 @@ program
 						// segment when present (…/<slug>/<STYLECOLOR>).
 						const sc = /\/([A-Z0-9]{2,8}-[0-9]{2,4})(?:[/?#]|$)/i.exec(drop.sku)?.[1] ?? ''
 						skuResolved = { productUrl: drop.sku, slug: '', styleColor: sc }
-						console.log(`[run] ${dropLabel} → ${drop.sku} (URL directe)`)
+						console.log(`[run] ${dropLabel} → ${drop.sku} (direct URL)`)
 					} else {
 						const controller = new AbortController()
 						// In dry-run (testing), don't block the queue forever on a SKU that
@@ -1059,7 +1059,7 @@ program
 							if (resolveTimer) clearTimeout(resolveTimer)
 							if (controller.signal.aborted) {
 								console.log(
-									`[run] ${dropLabel} — pas encore dans le feed Nike (dry-run: ignoré). Utilise un SKU en vente, ou colle l'URL complète du produit.`,
+									`[run] ${dropLabel} — not yet in Nike feed (dry-run: skipped). Use an in-stock SKU or paste the full product URL.`,
 								)
 								continue
 							}
@@ -1132,7 +1132,7 @@ program
 							if (!allRetryable) break // e.g. NO_SESSION/BLOCKED → stop, surface to user
 							round++
 							const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000))
-							console.log(`[run] ${drop.sku} — pas encore en vente, nouvelle tentative (round ${round}, ${remaining}s restantes)…`)
+							console.log(`[run] ${drop.sku} — not live yet, retrying (round ${round}, ${remaining}s remaining)…`)
 							await new Promise((r) => setTimeout(r, pollMs))
 							results = await runCheckout(accounts)
 							allResults.push(...results)

@@ -52,23 +52,23 @@ export function DataDirScreen({ onDone }: DataDirScreenProps) {
 	return (
 		<Box flexDirection='column' padding={1}>
 			<Text color='magenta' bold>
-				Dossier de configuration (CSV)
+				Configuration Directory (CSV)
 			</Text>
 			<Text>
-				Actuel : <Text color='cyan'>{current}</Text>
+				Current: <Text color='cyan'>{current}</Text>
 			</Text>
-			<Text color='gray'>Défaut : {defaultDataDir()}</Text>
+			<Text color='gray'>Default: {defaultDataDir()}</Text>
 			<Box marginTop={1} flexDirection='column'>
-				<Text>Nouveau dossier (chemin absolu) — Entrée vide pour garder l'actuel :</Text>
+				<Text>New directory (absolute path) — Empty Enter to keep current:</Text>
 				<Box>
 					<Text color='cyan'>{'> '}</Text>
 					<TextInput value={value} onChange={setValue} onSubmit={handleSubmit} />
 				</Box>
 			</Box>
-			{saved ? <Text color='green'>✓ Enregistré : {saved}</Text> : null}
+			{saved ? <Text color='green'>✓ Saved: {saved}</Text> : null}
 			{error ? <Text color='red'>{error}</Text> : null}
 			<Box marginTop={1}>
-				<Text color='gray'>Esc pour revenir au menu sans changer</Text>
+				<Text color='gray'>Esc to return to menu without changing</Text>
 			</Box>
 		</Box>
 	)

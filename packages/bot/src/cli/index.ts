@@ -59,9 +59,9 @@ async function showStatusInline(): Promise<void> {
 		const status = await getBotStatus()
 		printBotStatus(status)
 	} catch (err) {
-		console.error('Status indisponible :', (err as Error).message)
+		console.error('Status unavailable:', (err as Error).message)
 	}
-	await waitForKey('\nAppuie sur Entrée pour revenir au menu…')
+	await waitForKey('\nPress Enter to return to the menu…')
 }
 
 /** Block until the user presses a key (Enter). Resolves immediately if no TTY. */
@@ -109,13 +109,13 @@ async function resolveHomeAction(): Promise<string[]> {
 			accountCount,
 			dropCount,
 			items: [
-				{ label: 'Lancer les drops', value: 'run', hint: 'exécute drop.csv (dashboard live)' },
-				{ label: 'Tester sans commander (dry-run)', value: 'run:dry', hint: 'même flux, sans payer' },
-				{ label: 'État des comptes & sessions', value: 'status', hint: 'retour au menu ensuite' },
-				{ label: 'Capturer / rafraîchir une session', value: 'capture', hint: 'connexion manuelle Nike' },
-				{ label: 'Dossier de configuration (CSV)', value: 'folder', hint: 'changer où sont les CSV' },
-				{ label: 'Reconfigurer (assistant)', value: 'init', hint: 'comptes, cartes, adresses' },
-				{ label: 'Quitter', value: 'exit', hint: '' },
+				{ label: 'Launch drops', value: 'run', hint: 'run drop.csv (live dashboard)' },
+				{ label: 'Test without ordering (dry-run)', value: 'run:dry', hint: 'same flow, no payment' },
+				{ label: 'Account & session status', value: 'status', hint: 'returns to menu afterward' },
+				{ label: 'Capture / refresh session', value: 'capture', hint: 'manual Nike login' },
+				{ label: 'Configuration directory (CSV)', value: 'folder', hint: 'change CSV files location' },
+				{ label: 'Reconfigure (setup wizard)', value: 'init', hint: 'accounts, cards, addresses' },
+				{ label: 'Quit', value: 'exit', hint: '' },
 			],
 		})
 
@@ -142,7 +142,7 @@ async function resolveHomeAction(): Promise<string[]> {
 			case 'capture': {
 				const id = await firstAccountId()
 				if (!id) {
-					console.error('Aucun compte importé. Lance d’abord "Reconfigurer".')
+					console.error('No accounts imported. Run "Reconfigure" first.')
 					continue
 				}
 				return ['capture-session', '--account', id]
@@ -189,22 +189,22 @@ async function main(): Promise<void> {
 	// The home menu needs a real terminal (raw-mode keyboard input). When
 	// launched without a TTY (piped/CI), print the commands and exit.
 	if (!process.stdin.isTTY) {
-		console.log('Nike Bot — déjà configuré. Commandes disponibles :')
-		console.log('  nike-bot run            # lancer les drops (drop.csv)')
-		console.log('  nike-bot run --dry-run  # tester sans commander')
-		console.log('  nike-bot status         # état comptes & sessions')
-		console.log('  nike-bot capture-session --account <id>  # capturer/rafraîchir une session')
-		console.log('  nike-bot init           # reconfigurer')
+		console.log('Nike Bot — already configured. Available commands:')
+		console.log('  nike-bot run                            # launch drops (drop.csv)')
+		console.log('  nike-bot run --dry-run                  # test without ordering')
+		console.log('  nike-bot status                         # account & session status')
+		console.log('  nike-bot capture-session --account <id> # capture/refresh session')
+		console.log('  nike-bot init                           # reconfigure')
 		return
 	}
 
 	// HOME LOOP: after any action completes, come BACK to the menu instead of
 	// quitting. Operate-actions (run / capture / init) dispatch their command and
 	// return here when done; read-only actions (status / folder) are handled
-	// inline inside resolveHomeAction. Only "Quitter" leaves the app.
+	// inline inside resolveHomeAction. Only "Quit" leaves the app.
 	for (;;) {
 		const action = await resolveHomeAction()
-		if (action.length === 0) return // Quitter
+		if (action.length === 0) return // Quit
 		const argv = ['node', 'nike-bot', ...action]
 		await ensureChromiumReady(argv)
 		try {

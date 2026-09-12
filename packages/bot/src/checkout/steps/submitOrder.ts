@@ -4,7 +4,7 @@ import { executeStep, type StepResult } from '../executeStep.ts'
 import { naturalClick } from '../naturalClick.ts'
 
 const THREE_DS_MESSAGE =
-  '⚠️ VALIDE LE 3-D SECURE — approuve le paiement sur ton app bancaire (Revolut/banque). Fenêtre courte !'
+  '⚠️ APPROVE 3-D SECURE — approve payment in your banking app (Revolut/bank). Short window!'
 
 /**
  * Loudly alert the operator that the order is awaiting 3-D Secure approval.
@@ -53,7 +53,7 @@ async function notify3DS(page: Page): Promise<void> {
       const { spawn } = await import('node:child_process')
       spawn(
         'osascript',
-        ['-e', 'display notification "Approuve le paiement sur ton app bancaire" with title "Nike Bot — 3-D Secure" sound name "Glass"'],
+        ['-e', 'display notification "Approve payment in your banking app" with title "Nike Bot — 3-D Secure" sound name "Glass"'],
         { stdio: 'ignore', detached: true },
       ).unref()
     } catch {}
@@ -71,7 +71,7 @@ async function checkOrderState(page: Page, confirmSelector: string, ms: number):
   ])
   if (confirmed) return 'confirmed'
   const errored = await page
-    .locator('h1:has-text("Erreur"), h2:has-text("Erreur"), :text("paiement a été refusé"), :text("paiement a échoué"), :text("carte a été refusée")')
+    .locator('h1:has-text("Erreur"), h1:has-text("Error"), h2:has-text("Erreur"), h2:has-text("Error"), :text("paiement a été refusé"), :text("paiement a échoué"), :text("payment was declined"), :text("payment failed"), :text("carte a été refusée"), :text("card was declined")')
     .first()
     .isVisible()
     .catch(() => false)
