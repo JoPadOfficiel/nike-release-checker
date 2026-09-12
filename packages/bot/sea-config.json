@@ -1,5 +1,5 @@
 {
-	"main": "dist/nike-bot.bundle.js",
+	"main": "dist/nike-bot.bundle.mjs",
 	"output": "dist/nike-bot.blob",
 	"disableExperimentalSEAWarning": true,
 	"useSnapshot": false,

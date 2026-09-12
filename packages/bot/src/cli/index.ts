@@ -8,7 +8,7 @@ function shouldSkipChromiumCheck(argv: readonly string[]): boolean {
 	if (args.length === 0) return true
 	for (const a of args) {
 		if (a === '--version' || a === '-V' || a === '--help' || a === '-h' || a === 'help') return true
-		if (a === 'install-browser') return true
+		if (a === 'install-browser' || a === 'status' || a === 'cards' || a === 'accounts' || a === 'kpsdk-stats' || a === 'stop') return true
 	}
 	return false
 }

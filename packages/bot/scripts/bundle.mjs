@@ -9,9 +9,13 @@ await build({
 	bundle: true,
 	platform: 'node',
 	target: 'node26',
-	format: 'cjs',
-	outfile: fileURLToPath(new URL('../dist/nike-bot.bundle.js', import.meta.url)),
+	format: 'esm',
+	outfile: fileURLToPath(new URL('../dist/nike-bot.bundle.mjs', import.meta.url)),
+	banner: {
+		js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+	},
 	define: {
+		'process.env.NODE_ENV': '"production"',
 		__BOT_VERSION__: JSON.stringify(pkg.version),
 	},
 	external: [
