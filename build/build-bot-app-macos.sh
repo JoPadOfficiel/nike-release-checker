@@ -94,7 +94,10 @@ build({
     'patchright', 'patchright-core',
     'better-sqlite3',
   ],
-  banner: { js: \"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" },
+  define: {
+    'process.env.NODE_ENV': '\"production\"',
+  },
+  banner: { js: \"import { createRequire } from 'module'; const require = createRequire(import.meta.url); process.env.NODE_ENV = 'production';\" },
   logLevel: 'info',
 }).catch(err => { console.error(err); process.exit(1); });
 " )
